@@ -1,8 +1,5 @@
 import errno
 import struct
-import time
-import urllib
-from cStringIO import StringIO
 
 
 import gevent
@@ -11,194 +8,20 @@ from gevent.queue import Queue
 from gevent.lock import RLock
 from gevent import socket
 
-
 from .urls import parse_amqp_url
 
-from .message import Message
 from .exceptions import ConnectionError
 from . import spec
-
-
-class BufferedReader(object):
-    """A buffer around a reader socket.
-
-    This is principally to allow us to read an exact number of bytes at a time.
-
-    """
-    def __init__(self, sock):
-        self.sock = sock
-        self.buf = ''
-
-    def read(self, size):
-        """Read exactly size bytes from self.sock"""
-        while True:
-            if len(self.buf) >= size:
-                out, self.buf = self.buf[:size], self.buf[size:]
-                return out
-
-            chunk = self.sock.recv(4096)
-            if not chunk:
-                # FIXME: get a better error message from somewhere?
-                raise ConnectionError("Connection lost")
-            self.buf += chunk
+from .buffers import BufferedReader, DecodeBuffer
+from .channels import StartChannel, MessageChannel
 
 
 FRAME_HEADER = struct.Struct('!BHI')
 
 
-class Channel(object):
-    """A communication channel.
-
-    Multiple channels are multiplexed onto the same connection.
-    """
-    def __init__(self, connection, id):
-        self.connection = connection
-        self.id = id
-        self.listeners = {}
-        self.queue = Queue()
-
-    def _send(self, frame):
-        """Send one frame over the channel."""
-        print frame.name
-        self.connection._send_frames(self.id, [frame.encode()])
-
-    def _send_message(self, frame, headers, payload):
-        """Send method, header and body frames over the channel."""
-        print frame.name
-        fs = spec.encode_frames(frame, headers, payload, self.connection.frame_max)
-        self.connection._send_frames(self.id, fs)
-
-    def _on_method(self, frame):
-        """Called when the channel has received a method frame."""
-        if frame.has_content:
-            self._method = frame
-        else:
-            self.dispatch(frame.name, frame)
-
-    def _on_headers(self, size, props):
-        """Called when the channel has received a headers frame."""
-        self._headers = props
-        self._to_read = size
-        self._body = StringIO()
-
-    def _on_body(self, payload):
-        """Called when the channel has received a body frame."""
-        self._payload.write(payload)
-        self._to_read -= len(payload)
-        if self._to_read <= 0:
-            if not self._headers or not self._method:
-                return
-
-            m = Message(self,
-                self._method,
-                self._headers,
-                self._body.getvalue()
-            )
-            self.dispatch(self._method.name, m)
-            self._headers = None
-            self._method = None
-            self._body = None
-
-    def dispatch(self, method, *args):
-        self.listeners[method](*args)
-
-    def register(self, method, callback):
-        self.listeners[method] = callback
-
-
-class StartChannel(Channel):
-    """A channel to handle connection.
-
-    The is the initial control channel opened by the server; we pre-register
-    events so as to handle connection start.
-
-    From the AMQP spec:
-
-    * The server responds with its protocol version and other properties,
-      including a list of the security mechanisms that it supports (the Start
-      method).
-
-    * The client selects a security mechanism (Start-Ok).
-
-    * The server starts the authentication process, which uses the SASL
-      challenge-response model. It sends the client a challenge (Secure).
-
-    * The client sends an authentication response (Secure-Ok). For example
-      using the "plain" mechanism, the response consist of a login name and
-      password.
-
-    * The server repeats the challenge (Secure) or moves to negotiation,
-      sending a set of parameters such as maximum frame size (Tune).
-
-    * The client accepts or lowers these parameters (Tune-Ok).
-
-    * The client formally opens the connection and selects a virtual host
-      (Open).
-
-    * The server confirms that the virtual host is a valid choice (Open-Ok).
-
-    """
-    def __init__(self, connection, id):
-        super(StartChannel, self).__init__(connection, id)
-        self.register('connection.start', self.on_start)
-        self.register('connection.tune', self.on_tune)
-        self.register('connection.open_ok', self.on_open_ok)
-
-    def on_start(self, frame):
-        """Handle the start frame."""
-        # TODO: support SASL authentication
-        assert 'PLAIN' in frame.mechanisms.split(), "Only PLAIN auth supported."
-
-        auth = '\0%s\0%s' % (
-            self.connection.username, self.connection.password
-        )
-        scapa = frame.server_properties.get('capabilities', {})
-        ccapa = {}
-        if scapa.get('consumer_cancel_notify'):
-            ccapa['consumer_cancel_notify'] = True
-
-        self._send(
-            spec.FrameConnectionStartOk(
-                {'product': 'nucleon.amqp', 'capabilities': ccapa},
-                'PLAIN',
-                auth,
-                'en_US'
-            )
-        )
-
-    def on_tune(self, frame):
-        """Handle the tune message.
-
-        This message signals that we are allowed to open a virtual host.
-        """
-        self.connection._tune(frame.frame_max, frame.channel_max)
-        # FIXME: do heartbeat
-        self._send(
-            spec.FrameConnectionTuneOk(frame.channel_max, frame.frame_max, 0)
-        )
-        self._send(
-            spec.FrameConnectionOpen(self.connection.vhost)
-        )
-
-    def on_open_ok(self, frame):
-        """We are connected!"""
-        self.connection.connected_event.set("Connected!")
-
-
-class MessageChannel(Channel):
-    def __init__(self, connection, id):
-        super(StartChannel, self).__init__(connection, id)
-        self.register('channel.open_ok', self.on_open)
-
-    def _open(self):
-        self._send(spec.FrameChannelOpen())
-
-    def on_channel_open(self, frame):
-        print "Open!"
-
-
 class Connection(object):
-    frame_max = 131072
+    frame_max = 131072   # adjusted by Tune frame
+    channel_max = 65535  # adjusted by Tune method
     MAX_SEND_QUEUE = 32  # frames
 
     def __init__(self, amqp_url='amqp:///', pubacks=None):
@@ -216,7 +39,7 @@ class Connection(object):
         with self.channels_lock:
             id = self.channel_id
             self.channel_id += 1
-            chan = Channel(self, id)
+            chan = MessageChannel(self, id)
             self.channels[id] = chan
             chan._open()
         return chan
@@ -274,7 +97,7 @@ class Connection(object):
                 payload = reader.read(size + 1)
                 assert payload[-1] == '\xCE'
 
-                buffer = spec.Buffer(payload)
+                buffer = DecodeBuffer(payload)
                 if frame_type == 0x01:  # Method frame
                     method_id, = buffer.read('!I')
                     frame = spec.METHODS[method_id].decode(buffer)
@@ -289,6 +112,8 @@ class Connection(object):
                 else:
                     raise ConnectionError("Unknown frame type")
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # for debugging
             self.connected_event.set(e)
         finally:
             self._on_disconnect()
@@ -299,7 +124,7 @@ class Connection(object):
             c = self.channels[channel]
         except KeyError:
             if frame.name == 'connection.start':
-                c = StartChannel(channel, self)
+                c = StartChannel(self, channel)
                 self.channels[channel] = c
             else:
                 return
@@ -365,7 +190,7 @@ class Connection(object):
         frame_max = frame_max if frame_max != 0 else 2**19
         # limit the maximum frame size, to ensure messages are multiplexed
         self.frame_max = min(131072, frame_max)
-        self.channel_max = channel_max if channel_max > 0 else 1024
+        self.channel_max = channel_max if channel_max > 0 else 65535
 
     def _shutdown(self, result):
         # Cancel all events.

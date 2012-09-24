@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import os
+import re
 import sys
 import json
+import keyword
 
 sys.path.append(os.path.join("rabbitmq-codegen"))
 from amqp_codegen import AmqpSpec, do_main_dict
@@ -22,11 +24,79 @@ BANNED_FIELDS = {
 
 import codegen_helpers
 
+from xml.etree.ElementTree import parse
+spec_xml = parse(open('amqp0-9-1.xml'))
+
+
+def method_doc(cls, method):
+    """Find method documentation in the XML spec file."""
+    e = spec_xml.find(
+        ".//class[@name='%s']/method[@name='%s']" % (cls, method)
+    )
+    txt = ''
+    if e is not None:
+        doc = e.find('./doc')
+        if doc is not None:
+            txt = doc.text.strip()
+            txt = re.sub(r'\s+', ' ', txt).strip()
+            txt = re.sub(r'^(.*?\.)\s+', r'\1\n\n', txt)
+            txt += '\n\n'
+        for field in e.findall('./field[doc]'):
+            name = pyize(field.get('name'))
+            doc = field.find('./doc').text.strip()
+            txt += ':param %s: %s\n\n' % (name, re.sub(r'\s+', ' ', doc))
+    return txt.rstrip()
+
+
+def method_responses(cls, method):
+    """Find corresponding response methods in the XML spec file."""
+    e = spec_xml.find(
+        ".//class[@name='%s']/method[@name='%s']" % (cls, method)
+    )
+
+    responses = []
+    if e is not None:
+        if e.get('synchronous') == '1':
+            for resp in e.findall('.//response'):
+                n = resp.get('name')
+                if n:
+                    responses.append('%s.%s' % (cls, n))
+            if not responses:
+                print >>sys.stderr, "Warning: no responses found for sync method %s.%s" % (cls, method)
+    return responses
+
+
+def word_wrap(str, width=79, indent=8):
+    """Format a prose string to 79 characters, as befits a docstring."""
+    lines = []
+    l = ''
+    max_w = width - indent
+    for w in str.split(' '):
+        if '\n' in w:
+            newlines = w.split('\n')
+            l += ' ' + newlines[0]
+            for nl in newlines[1:]:
+                lines.append(l)
+                l = nl
+            continue
+
+        if len(l) + len(w) + 1 > max_w:
+            lines.append(l)
+            l = ''
+        if l:
+            l += ' ' + w
+        else:
+            l += w
+    if l:
+        lines.append(l)
+
+    return '\n'.join((' ' * indent + l).rstrip() for l in lines)
+
 
 def pyize(*args):
     """Convert to an identifier in lowercase_with_underscores format"""
     a = ' '.join(args).replace('-', '_').replace(' ', '_')
-    if a in ['global', 'type']:
+    if keyword.iskeyword(a):
         a += '_'
     return a
 
@@ -62,8 +132,6 @@ def print_constants(spec):
             print "%-24s= 0x%04X" % (
                 c.u,
                 c.index,)
-    print
-    print
 
 
 def print_decode_methods_map(client_methods):
@@ -97,11 +165,13 @@ def print_frame_class(m):
     if m.hasContent:
         print "    has_content = True"
         print "    class_id = %s" % (m.klass.u,)
+    else:
+        print "    has_content = False"
     print
 
-    print "    def __init__(self, %s):" % (', '.join(_default_params(m)),)
-    print "        super(%s, self).__init__(%s)" % (m.frame, ', '.join(tuple(f.n for f in m.arguments)))
-    print
+#    print "    def __init__(self, %s):" % (', '.join(_default_params(m)),)
+#    print "        super(%s, self).__init__(%s)" % (m.frame, ', '.join(tuple(f.n for f in m.arguments)))
+#    print
     print "    @staticmethod"
     print "    def decode(buffer):"
 
@@ -122,16 +192,19 @@ def print_encode_method(m):
     for f in [f for f in m.arguments if not f.banned and f.t in ['table']]:
         print "        %s_raw = table.encode(self.%s)" % (f.n, f.n)
 
-    if m.hasContent:
-        print "        props, headers = split_headers(self.user_headers, %s_PROPS_SET)" % (
-            m.klass.name.upper(),)
-        print "        if headers:"
-        print "            props['headers'] = headers"
+#    if m.hasContent:
+#        print "        props, headers = split_headers(self.user_headers, %s_PROPS_SET)" % (
+#            m.klass.name.upper(),)
+#        print "        if headers:"
+#        print "            props['headers'] = headers"
 
     fields = codegen_helpers.PackWrapper()
     fields.add('self.method_id', 'long')
     for f in m.arguments:
-        fields.add('self.%s' % f.n, f.t)
+        if not f.banned and f.t == 'table':
+            fields.add('%s' % f.n, f.t)
+        else:
+            fields.add('self.%s' % f.n, f.t)
     fields.close()
 
     print "        yield (0x01,"
@@ -183,10 +256,24 @@ def print_decode_properties(c):
 
 def _default_params(m):
     for f in m.arguments:
+        if f.n in BANNED_FIELDS:
+            continue
         yield "%s=%r" % (f.n, f.defaultvalue)
+    if m.hasContent:
+        yield "headers={}"
+        yield "payload=''"
+#        yield "frame_size=None"
+
+
+def _pass_params(m):
+    for f in m.arguments:
+        try:
+            yield repr(BANNED_FIELDS[f.n])
+        except KeyError:
+            yield f.n
 #    if m.hasContent:
-#        yield "user_headers={}"
-#        yield "payload=''"
+#        yield "headers"
+#        yield "payload"
 #        yield "frame_size=None"
 
 
@@ -199,6 +286,72 @@ def _method_params_list(m):
 #        yield 'body'
 #        yield 'frame_size'
 
+
+def print_writer_class(methods):
+    print '''\n
+def syncmethod(*responses):
+    """Decorator for assigning appropriate responses for an AMQP method."""
+    def decorate(method):
+        @wraps(method)
+        def wrapper(self, *args, **kwargs):
+            bound = partial(method, self)
+            return self._call_sync(bound, responses, *args, **kwargs)
+        return wrapper
+    return decorate
+
+
+class FrameWriter(object):
+    """Interface for converting AMQP client method calls to AMQP frames.
+
+    The underlying transport is not defined here; subclasses can implement
+    this by defining ._send() and ._send_message() to encode the frame and
+    ultimately write it to the wire.
+    """
+
+    def _send(self, frame):
+        raise NotImplementedError(
+            "Subclasses must implement this method to send a method frame."
+        )
+
+    def _send_message(self, frame, headers, payload):
+        raise NotImplementedError(
+            "Subclasses must implement this method to send a method frame "
+            "plus message headers and payload."
+        )
+
+    def _call_sync(self, method, responses, *args, **kwargs):
+        """Hook for making a method call synchronous.
+
+        Subclasses should re-implement this method to call method in such a way
+        that the client will receive one of the methods in responses as a
+        response.
+        """
+        return method(*args, **kwargs)'''
+
+    for m in methods:
+        method_name = pyize(m.klass.name + '_' + m.name)
+        pass_params = ', '.join(_pass_params(m))
+        responses = method_responses(m.klass.name, m.name)
+        print
+
+        if responses:
+            print "    @syncmethod(%s)" % (', '.join(repr(r) for r in responses))
+        print "    def %s(self, %s):" % (method_name, ', '.join(_default_params(m)),)
+
+        docstring = method_doc(m.klass.name, m.name)
+        if docstring:
+            print '        """%s\n        """' % word_wrap(docstring).strip()
+
+        if m.hasContent:
+            print "        self._send_message(%s(%s), headers, payload)" % (
+                m.frame,
+                pass_params
+            )
+        else:
+            print "        self._send(%s(%s))" % (
+                m.frame,
+                pass_params
+            )
 
 def print_encode_properties(c):
     print "%s_PROPS_SET = set(("% (c.name.upper(),)
@@ -267,7 +420,7 @@ def GetAmqpSpec(spec_path, accepted_by_udate):
             m.frame = Pyize('frame', m.klass.name, m.name)
 
             try:
-                m.accepted_by = accepted_by_udate[c.name][m.name]
+                m.accepted_by = [str(s) for s in accepted_by_udate[c.name][m.name]]
             except KeyError:
                 print >> sys.stderr, " [!] Method %s.%s unknown! Assuming " \
                     "['server', 'client']" % (c.name, m.name)
@@ -338,6 +491,8 @@ def main(spec_path):
     for c in props_classes:
         print_encode_properties(c)
         print
+
+    print_writer_class([m for m in spec.allMethods() if 'server' in m.accepted_by])
 
 
 
