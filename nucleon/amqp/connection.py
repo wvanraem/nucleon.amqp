@@ -1,6 +1,7 @@
 import errno
 import struct
 
+from contextlib import contextmanager
 
 import gevent
 from gevent.event import AsyncResult
@@ -10,13 +11,19 @@ from gevent import socket
 
 from .urls import parse_amqp_url
 
-from .exceptions import ConnectionError
+from .exceptions import ConnectionError, AMQPHardError, ChannelError
 from . import spec
 from .buffers import BufferedReader, DecodeBuffer
 from .channels import StartChannel, MessageChannel
 
 
 FRAME_HEADER = struct.Struct('!BHI')
+
+
+STATE_DISCONNECTED = 0
+STATE_CONNECTING = 1
+STATE_CONNECTED = 2
+STATE_DISCONNECTING = 3
 
 
 class Connection(object):
@@ -30,19 +37,42 @@ class Connection(object):
         self.channels = {}
         self.channels_lock = RLock()
         self.queue = None
+        self.state = STATE_DISCONNECTED
 
         (self.username, self.password, self.vhost, self.host, self.port) = \
             parse_amqp_url(str(amqp_url))
 
-    def channel(self):
+    def allocate_channel(self):
         """Create a new channel."""
         with self.channels_lock:
+            for i in xrange(self.channel_max):
+                self.channel_id = self.channel_id % (self.channel_max - 1) + 1
+                if self.channel_id not in self.channels:
+                    break
+            else:
+                raise ChannelError("No available channels!")
+
             id = self.channel_id
-            self.channel_id += 1
             chan = MessageChannel(self, id)
             self.channels[id] = chan
-            chan._open()
+            chan.channel_open()
         return chan
+
+    def _remove_channel(self, id):
+        """Remove a channel (presumably because it has closed.)"""
+        with self.channels_lock:
+            del(self.channels[id])
+
+    @contextmanager
+    def channel(self):
+        """Acquire a channel and later release it."""
+        channel = self.allocate_channel()
+        try:
+            yield channel
+        finally:
+            pass
+            # if channel.connection and self.state == STATE_CONNECTED:
+            #    channel.channel_close(reply_code=200)
 
     def connect(self):
         self.connected_event = AsyncResult()
@@ -55,15 +85,24 @@ class Connection(object):
 
     def _connect(self):
         """Connect to the remote server and start reader/writer greenlets."""
-        try:
-            addrinfo = socket.getaddrinfo(self.host, self.port, socket.AF_INET6, socket.SOCK_STREAM)
-        except socket.gaierror:
-            addrinfo = socket.getaddrinfo(self.host, self.port, socket.AF_INET, socket.SOCK_STREAM)
 
-        (family, socktype, proto, canonname, sockaddr) = addrinfo[0]
-        self.sock = socket.socket(family, socktype, proto)
-        #set_ridiculously_high_buffers(self.sd)
-        self.sock.connect(sockaddr)
+        self.state = STATE_CONNECTING
+
+        try:
+            try:
+                addrinfo = socket.getaddrinfo(self.host, self.port, socket.AF_INET6, socket.SOCK_STREAM)
+            except socket.gaierror:
+                addrinfo = socket.getaddrinfo(self.host, self.port, socket.AF_INET, socket.SOCK_STREAM)
+
+            (family, socktype, proto, canonname, sockaddr) = addrinfo[0]
+            self.sock = socket.socket(family, socktype, proto)
+            #set_ridiculously_high_buffers(self.sd)
+            self.sock.connect(sockaddr)
+        except:
+            self.state = STATE_DISCONNECTED
+            raise
+        else:
+            self.state = STATE_CONNECTED
 
         # Set up connection greenlets
         self.queue = Queue(self.MAX_SEND_QUEUE)
@@ -72,9 +111,26 @@ class Connection(object):
         self.reader.link(lambda reader: self.writer.kill())
         self.writer.link(lambda writer: self.reader.kill())
 
-    def _on_disconnect(self):
-        # TODO: signal all channels that the connection has closed
-        pass
+    def on_error(self, exc):
+        """Dispatch a connection error to all channels."""
+        for id, channel in self.channels.items():
+            channel.on_error(exc)
+
+    def _on_connect(self):
+        """Called when the connection is fully open."""
+        self.state = STATE_CONNECTED
+        self.connected_event.set("Connected!")
+
+    def _on_disconnect(self, exc):
+        """Called when the connection has been abnormally disconnected."""
+        self.on_error(exc)
+        while True:
+            try:
+                self._connect()
+            except Exception:
+                gevent.sleep(6)
+            else:
+                break
 
     def do_read(self):
         """Run a reader greenlet.
@@ -90,7 +146,7 @@ class Connection(object):
 #            if preamble != spec.PREAMBLE:
 #                raise ConnectionError("Incorrect protocol header from AMQP server")
 
-            while True:
+            while self.state in [STATE_CONNECTED, STATE_DISCONNECTING]:
                 frame_header = reader.read(FRAME_HEADER.size)
                 frame_type, channel, size = FRAME_HEADER.unpack(frame_header)
 
@@ -101,22 +157,25 @@ class Connection(object):
                 if frame_type == 0x01:  # Method frame
                     method_id, = buffer.read('!I')
                     frame = spec.METHODS[method_id].decode(buffer)
-                    print '->', frame.name
                     self.inbound_method(channel, frame)
                 elif frame_type == 0x02:  # header frame
                     class_id, body_size = buffer.read('!HxxQ')
-                    props, offset = spec.PROPS[class_id](buffer)
+                    props = spec.PROPS[class_id](buffer)
                     self.inbound_props(channel, body_size, props)
                 elif frame_type == 0x03:  # body frame
                     self.inbound_body(channel, payload[:-1])
+                elif frame_type == 0x04:
+                    pass  # heartbeat frame
                 else:
                     raise ConnectionError("Unknown frame type")
         except Exception as e:
-            import traceback
-            traceback.print_exc()  # for debugging
             self.connected_event.set(e)
-        finally:
-            self._on_disconnect()
+
+            if self.state == STATE_CONNECTED:
+                self.state = STATE_DISCONNECTED
+                self._on_disconnect(e)
+            else:
+                self.state = STATE_DISCONNECTED
 
     def inbound_method(self, channel, frame):
         """Dispatch an inbound method."""
@@ -128,6 +187,7 @@ class Connection(object):
                 self.channels[channel] = c
             else:
                 return
+        print 's->c', frame.name
         c._on_method(frame)
 
     def inbound_props(self, channel, body_size, props):
@@ -182,7 +242,7 @@ class Connection(object):
             ])
             self.queue.put(fdata)
 
-    def _tune(self, frame_max, channel_max):
+    def _tune(self, frame_max, channel_max, heartbeat=0):
         """Adjust connection parameters.
 
         Called in response to negotiation with the server.
@@ -192,29 +252,18 @@ class Connection(object):
         self.frame_max = min(131072, frame_max)
         self.channel_max = channel_max if channel_max > 0 else 65535
 
-    def _shutdown(self, result):
-        # Cancel all events.
-        for promise in self.promises.all():
-            # It's possible that a promise may be already `done` but still not
-            # removed. For example due to `refcnt`. In that case don't run
-            # callbacks.
-            if promise.to_be_released is False:
-                promise.done(result)
-
-        # And kill the socket
-        try:
-            self.sd.shutdown(socket.SHUT_RDWR)
-        except socket.error, e:
-            if e.errno is not errno.ENOTCONN:
-                raise
-        self.sd.close()
-        self.sd = None
-        # Sending is illegal
-        self.send_buf = None
+        # TODO: do heartbeat
 
     def close(self):
         """TODO: shut down cleanly."""
-        self.queue.put(None)
+        if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
+            self.state = STATE_DISCONNECTING
+            self.channels[0].connection_close()
+            self.queue.put(None)
+            self.writer.join()
+
+    def __del__(self):
+        self.close()
 
 
 def set_ridiculously_high_buffers(sd):

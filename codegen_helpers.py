@@ -91,7 +91,8 @@ class UnpackWrapper(object):
     def do_print(self, p, decor):
         for for_struct, fields in self._groups():
             if for_struct:
-                print p + ', '.join([f.dname(decor) for f in fields]),
+                print p + ', '.join([f.dname(decor) for f in fields]) + ',',
+
 #                for f, first, last in fl_iterate(fields):
 #                    print p + "%s%s%s%s" % (
 #                        '(' if first else ' ',

@@ -12,7 +12,7 @@ from amqp_codegen import AmqpSpec, do_main_dict
 
 AMQP_ACCEPTED_BY_UPDATE_JSON = "amqp-accepted-by-update.json"
 
-BANNED_CLASSES = ['access', 'tx']
+BANNED_CLASSES = []  # 'access', 'tx'
 BANNED_FIELDS = {
     'ticket': 0,
     'nowait': 0,
@@ -25,7 +25,7 @@ BANNED_FIELDS = {
 import codegen_helpers
 
 from xml.etree.ElementTree import parse
-spec_xml = parse(open('amqp0-9-1.xml'))
+spec_xml = parse(open('amqp0-9-1.extended.xml'))
 
 
 def method_doc(cls, method):
@@ -157,7 +157,7 @@ def print_decode_properties_map(props_classes):
 def print_frame_class(m):
     print "class %s(Frame):" % (m.frame,)
     print "    __slots__ = %r" % (tuple(f.n for f in m.arguments),)
-    print "    name = '%s'" % (pyize(m.klass.name + '.' + m.name),)
+    print "    name = '%s'" % (m.klass.name + '.' + m.name)
     print "    method_id = 0x%08X  # %i,%i %i" % (
         m.method_id,
         m.klass.index, m.index, m.method_id
@@ -252,16 +252,22 @@ def print_decode_properties(c):
     print
 
 
+def get_default_value(f):
+    if f.n in ['reply_code']:
+        return 200
+    elif f.domain in ['short', 'long', 'longlong']:
+        return 0
+    return f.defaultvalue
 
 
 def _default_params(m):
     for f in m.arguments:
         if f.n in BANNED_FIELDS:
             continue
-        yield "%s=%r" % (f.n, f.defaultvalue)
+        yield "%s=%r" % (f.n, get_default_value(f))
     if m.hasContent:
         yield "headers={}"
-        yield "payload=''"
+        yield "body=''"
 #        yield "frame_size=None"
 
 
@@ -343,7 +349,7 @@ class FrameWriter(object):
             print '        """%s\n        """' % word_wrap(docstring).strip()
 
         if m.hasContent:
-            print "        self._send_message(%s(%s), headers, payload)" % (
+            print "        self._send_message(%s(%s), headers, body)" % (
                 m.frame,
                 pass_params
             )

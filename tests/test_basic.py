@@ -3,6 +3,7 @@ from __future__ import with_statement
 import os
 
 from nucleon.amqp import Connection
+from nucleon.amqp import exceptions
 
 import base
 
@@ -10,56 +11,66 @@ import base
 class TestBasic(base.TestCase):
     def test_simple_roundtrip(self):
         client = Connection(self.amqp_url)
-        client.queue_declare(queue=self.name)
-        client.basic_publish(exchange='', routing_key=self.name,
-                                       body=self.msg)
-        result = client.basic_consume(queue=self.name, no_ack=True)
-        self.assertEqual(result['body'], self.msg)
-        client.queue_delete(queue=self.name)
+        client.connect()
+
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
+            channel.basic_publish(
+                exchange='',
+                routing_key=self.name,
+                body=self.msg
+            )
+            result = channel.basic_consume(queue=self.name, no_ack=True)
+            self.assertEqual(result.body, self.msg)
+            channel.queue_delete(queue=self.name)
 
     def test_purge(self):
         client = Connection(self.amqp_url)
         client.connect()
-        client.queue_declare(queue=self.name)
-        client.basic_publish(exchange='', routing_key=self.name,
-                                       body=self.msg)
-        r = client.queue_purge(queue=self.name)
-        self.assertEqual(r['message_count'], 1)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
+            channel.basic_publish(
+                exchange='',
+                routing_key=self.name,
+                body=self.msg
+            )
+            r = channel.queue_purge(queue=self.name)
+            self.assertEqual(r.message_count, 1)
 
-        r = client.queue_purge(queue=self.name)
-        self.assertEqual(r['message_count'], 0)
+            r = channel.queue_purge(queue=self.name)
+            self.assertEqual(r.message_count, 0)
 
-        client.queue_delete(queue=self.name)
+            channel.queue_delete(queue=self.name)
 
     def test_basic_get_ack(self):
         client = Connection(self.amqp_url)
         client.connect()
 
-        client.queue_declare(queue=self.name)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
 
-        for i in range(4):
-            client.basic_publish(exchange='', routing_key=self.name,
-                                           body=self.msg + str(i))
+            for i in range(4):
+                channel.basic_publish(exchange='', routing_key=self.name,
+                                               body=self.msg + str(i))
 
-        msgs = []
-        for i in range(4):
-            result = client.basic_get(queue=self.name)
-            self.assertEqual(result['body'], self.msg + str(i))
-            self.assertEqual(result['redelivered'], False)
-            msgs.append(result)
+            msgs = []
+            for i in range(4):
+                result = channel.basic_get(queue=self.name)
+                self.assertEqual(result.body, self.msg + str(i))
+                self.assertEqual(result.redelivered, False)
+                msgs.append(result)
 
-        result = client.basic_get(queue=self.name)
-        self.assertEqual('body' in result, False)
+            result = channel.basic_get(queue=self.name)
+            self.assertEqual('body' in result, False)
 
-        self.assertEqual(len(client.channels.free_channels), 1)
-        self.assertEqual(client.channels.free_channel_numbers[-1], 7)
-        for msg in msgs:
-            client.basic_ack(msg)
-        self.assertEqual(len(client.channels.free_channels), 5)
-        self.assertEqual(client.channels.free_channel_numbers[-1], 7)
+            self.assertEqual(len(channel.channels.free_channels), 1)
+            self.assertEqual(channel.channels.free_channel_numbers[-1], 7)
+            for msg in msgs:
+                channel.basic_ack(msg)
+            self.assertEqual(len(channel.channels.free_channels), 5)
+            self.assertEqual(channel.channels.free_channel_numbers[-1], 7)
 
-        client.queue_delete(queue=self.name)
-
+            channel.queue_delete(queue=self.name)
 
     def test_basic_publish_bad_exchange(self):
         client = Connection(self.amqp_url)
@@ -73,7 +84,7 @@ class TestBasic(base.TestCase):
             self.assertEqual(len(client.channels.free_channels), 0)
             self.assertEqual(client.channels.free_channel_numbers[-1], 2)
 
-            with self.assertRaises(puka.NotFound) as cm:
+            with self.assertRaises(exceptions.NotFound) as cm:
                 client.wait(promise)
 
             (r,) = cm.exception # unpack args of exception
@@ -91,7 +102,7 @@ class TestBasic(base.TestCase):
 
         promise = client.basic_publish(exchange='', routing_key=self.name,
                                        mandatory=True, body='')
-        with self.assertRaises(puka.NoRoute):
+        with self.assertRaises(exceptions.NoRoute):
             client.wait(promise)
 
         promise = client.queue_declare(queue=self.name)

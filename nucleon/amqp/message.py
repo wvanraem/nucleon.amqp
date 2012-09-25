@@ -7,14 +7,14 @@ class Message(object):
 
     """
 
-    def __init__(self, conn, frame, headers, body):
+    def __init__(self, channel, frame, headers, body):
         """Construct a message.
 
         `conn` is a PukaConnection that will be used to communicate with the
         source AMQP server. `result` is the puka Frame received.
 
         """
-        self.conn = conn
+        self.channel = channel
         self._frame = frame
         self._headers = headers
         self._body = body
@@ -29,32 +29,35 @@ class Message(object):
     @property
     def exchange(self):
         """Retrieve the exchange."""
-        return self._frame['exchange']
+        return self._frame.exchange
 
     @property
     def routing_key(self):
         """Retrieve the routing key."""
-        return self._frame['routing_key']
+        return self._frame.routing_key
 
     @property
     def body(self):
         """Retrieve the message body."""
-        return self._frame['body']
+        return self._body
 
     @property
     def redelivered(self):
         """Retrieve the redelivery status."""
-        return self._frame['redelivered']
+        return self._frame.redelivered
 
     @property
     def delivery_tag(self):
         """Retrieve the delivery tag."""
-        return self._frame['delivery_tag']
+        return self._frame.delivery_tag
 
     @property
     def consumer_tag(self):
-        """Retrieve the consumer tag."""
-        return self._frame['consumer_tag']
+        """Retrieve the consumer tag.
+
+        If the message has been retrieved with basic_get, it won't have this.
+        """
+        return self._frame.consumer_tag
 
     def ack(self, **kwargs):
         """Acknowledge the message."""
@@ -68,7 +71,7 @@ class Message(object):
             'routing_key': self.routing_key
         }
         params.update(kwargs)
-        self.conn.publish(**params)
+        self.channel.basic_publish(**params)
 
     def reject(self, **kwargs):
         """Reject a message, returning it to the queue.
@@ -80,8 +83,8 @@ class Message(object):
             messages to process."
 
         """
-        self.conn.basic_reject(self._frame, **kwargs)
+        self.channel.basic_reject(self._frame, **kwargs)
 
     def cancel_consume(self, **kwargs):
         """Cancel the consumer."""
-        self.conn.basic_cancel(self._frame['promise_number'], **kwargs)
+        self.channel.basic_cancel(self.consumer_tag, **kwargs)

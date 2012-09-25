@@ -3,7 +3,8 @@ from .spec import BASIC_PROPS_SET, encode_basic_properties
 
 def encode_message(frame, headers, body, frame_size):
     """Encode message headers and body as a sequence of frames."""
-    yield frame.encode()
+    for f in frame.encode():
+        yield f
     props, headers = split_headers(headers, BASIC_PROPS_SET)
     if headers:
         props['headers'] = headers

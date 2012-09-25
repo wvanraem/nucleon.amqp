@@ -1,5 +1,6 @@
 import logging
 from functools import partial
+from collections import deque
 from cStringIO import StringIO
 
 import gevent
@@ -10,9 +11,68 @@ from .message import Message
 from .encoding import encode_message
 
 from . import spec
+from . import exceptions
 
 
 log = logging.getLogger(__name__)
+
+
+class EventRegister(object):
+    """Handle event registration according to AMQP semantics.
+
+    Effectively, we register synchronous events to be received once only, while
+    some events (eg. connection close) can be handled at any time, and persist.
+
+    """
+    def __init__(self):
+        self.permanent = {}
+        self.once = deque()
+
+    def set_handler(self, method, callback):
+        """Set a permanent handler for an event."""
+        self.permanent[method] = callback
+
+    def unset_handler(self, method):
+        """Unset a permanent handler for an event."""
+        del(self.permanent[method])
+
+    def wait_event(self, methods, on_success, on_error):
+        """Set a temporary handler for one or more events."""
+        self.once.append((frozenset(methods), on_success, on_error))
+
+    def cancel_event(self, methods, on_success, on_error):
+        """Cancel a temporary handler for one or more events."""
+        try:
+            self.once.remove((frozenset(methods), on_success, on_error))
+        except ValueError:
+            pass
+
+    def get_error_handlers(self):
+        """Get all error handlers."""
+        hs = [on_error for _, _, on_error in self.once]
+        self.once.clear()
+        return hs
+
+    def get(self, method):
+        """Get the callbacks for a method.
+
+        This method returns at most one temporary callback and one permanent
+        callback.
+
+        """
+        cbs = []
+        for handler in self.once:
+            methods, on_success, _ = handler
+            if method in methods:
+                self.once.remove(handler)
+                cbs.append(on_success)
+                break
+
+        try:
+            cbs.append(self.permanent[method])
+        except KeyError:
+            pass
+        return cbs
 
 
 class Channel(spec.FrameWriter):
@@ -23,20 +83,46 @@ class Channel(spec.FrameWriter):
     def __init__(self, connection, id):
         self.connection = connection
         self.id = id
-        self.listeners = {}
+        self.listeners = EventRegister()
         self.queue = Queue()
+        self.listeners.set_handler('channel.close', self.on_channel_close)
+        self.listeners.set_handler('channel.close-ok', self.on_channel_close)
+        self.listeners.set_handler('connection.close', self.on_connection_close)
+        self.listeners.set_handler('connection.close-ok', self.on_connection_close)
 
         # Start an initial dispatcher
         self.replace_dispatcher()
 
+    def on_connection_close(self, frame):
+        """Handle a connection close error."""
+        exc = exceptions.exception_from_frame(frame)
+
+        # Let the connection class dispatch this to all channels
+        self.connection.on_error(exc)
+
+    def on_error(self, exc):
+        """Handle an error that is causing this channel to close."""
+        self.connection._remove_channel(self.id)
+        self.connection = None
+        for handler in self.listeners.get_error_handlers():
+            self.queue.put((handler, (exc,)))
+        self.stop_dispatcher()
+
+    def on_channel_close(self, frame):
+        """Handle a channel.close method."""
+        exc = exceptions.exception_from_frame(frame)
+        if frame.name == 'channel.close':
+            self.channel_close_ok()
+        self.on_error(exc)
+
     def _send(self, frame):
         """Send one frame over the channel."""
-        print frame.name
+        print "s<-c", frame.name
         self.connection._send_frames(self.id, frame.encode())
 
     def _send_message(self, frame, headers, payload):
         """Send method, header and body frames over the channel."""
-        print frame.name
+        print "s<-c", frame.name
         fs = encode_message(frame, headers, payload, self.connection.frame_max)
         self.connection._send_frames(self.id, fs)
 
@@ -55,10 +141,10 @@ class Channel(spec.FrameWriter):
 
     def _on_body(self, payload):
         """Called when the channel has received a body frame."""
-        self._payload.write(payload)
+        self._body.write(payload)
         self._to_read -= len(payload)
         if self._to_read <= 0:
-            if not self._headers or not self._method:
+            if self._headers is None or self._method is None:
                 return
 
             m = Message(self,
@@ -70,6 +156,23 @@ class Channel(spec.FrameWriter):
             self._headers = None
             self._method = None
             self._body = None
+
+    def _call_sync(self, method, responses, *args, **kwargs):
+        """Call a method, using AsyncResult to wait on the response."""
+        result = AsyncResult()
+
+        self.listeners.wait_event(responses, result.set, result.set_exception)
+
+        try:
+            method(*args, **kwargs)
+        except:
+            self.listeners.cancel_event(
+                responses, result.set, result.set_exception
+            )
+            raise
+
+        self.must_now_block()
+        return result.get()
 
     def dispatch(self, method, *args):
         """Fire the listener for a given method.
@@ -83,23 +186,14 @@ class Channel(spec.FrameWriter):
         """
         l = self.listeners.get(method)
         if l:
-            self.queue.put((l, args))
+            for h in l:
+                self.queue.put((h, args))
+        else:
+            print "Unhandled method", method
 
-    def register(self, method, callback):
-        """Register a callback for a method on this channel.
-
-        The callback will be called by the dispatcher greenlet whenever a
-        matching method frame is received from the server.
-
-        """
-        self.listeners[method] = callback
-
-    def unregister(self, method):
-        """Deregister any listeners for the given method."""
-        try:
-            del self.listeners[method]
-        except KeyError:
-            pass
+    def stop_dispatcher(self):
+        """Tell the dispatcher to stop after processing all current events"""
+        self.queue.put((None, None))
 
     def start_dispatcher(self):
         """Dispatch callbacks, intended to be run as a separate greenlet.
@@ -111,6 +205,9 @@ class Channel(spec.FrameWriter):
         """
         while True:
             callback, args = self.queue.get()
+            if callback is None:    # None tells the dispatcher to stop
+                return
+
             try:
                 callback(*args)
             except Exception:
@@ -179,9 +276,8 @@ class StartChannel(Channel):
     """
     def __init__(self, connection, id):
         super(StartChannel, self).__init__(connection, id)
-        self.register('connection.start', self.on_start)
-        self.register('connection.tune', self.on_tune)
-        self.register('connection.open_ok', self.on_open_ok)
+        self.listeners.set_handler('connection.start', self.on_start)
+        self.listeners.set_handler('connection.tune', self.on_tune)
 
     def on_start(self, frame):
         """Handle the start frame."""
@@ -209,25 +305,16 @@ class StartChannel(Channel):
         This message signals that we are allowed to open a virtual host.
         """
         self.connection._tune(frame.frame_max, frame.channel_max)
-        # FIXME: do heartbeat
         self.connection_tune_ok(frame.channel_max, frame.frame_max, 0)
-        self.connection_open(self.connection.vhost)
 
-    def on_open_ok(self, frame):
-        """We are connected!"""
-        self.connection.connected_event.set("Connected!")
+        # open the connection
+        self.connection_open(self.connection.vhost)
+        self.connection._on_connect()
 
 
 class MessageChannel(Channel):
     def __init__(self, connection, id):
         super(MessageChannel, self).__init__(connection, id)
-        self.register('channel.open_ok', self.on_channel_open)
-
-    def _open(self):
-        self.channel_open()
-
-    def on_channel_open(self, frame):
-        print "Open!"
 
     def consume(self, callback=None, *args, **kwargs):
         """
@@ -268,28 +355,6 @@ class MessageChannel(Channel):
                                 callback=callback_wrapper, *args, **kwargs)
             return consume_promise
 
-    def _call_sync(self, method, responses, *args, **kwargs):
-        """Call a method, using AsyncResult to wait on the response."""
-        result = AsyncResult()
-
-        def on_result(frame):
-            for r in responses:
-                self.unregister(r)
-            result.set(frame)
-
-        for r in responses:
-            self.register(r, on_result)
-
-        try:
-            method(*args, **kwargs)
-        except:
-            for r in responses:
-                self.unregister(r)
-            raise
-
-        self.must_now_block()
-        return result.get()
-
     def _run_with_callback(self, method, *args, **kwargs):
         """
         Internal method implements a generic pattern to perform sync and async
@@ -302,3 +367,8 @@ class MessageChannel(Channel):
             return self._run_blocking(method, *args, **kwargs)
         else:
             return method(*args, callback=callback, **kwargs)
+
+    def basic_get(self, *args, **kwargs):
+        """Wrap basic_get to return None if there is no message in the queue."""
+        r = super(MessageChannel, self).basic_get(*args, **kwargs)
+        return r if isinstance(r, Message) else None

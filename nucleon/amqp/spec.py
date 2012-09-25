@@ -40,7 +40,7 @@ class FrameConnectionStart(Frame):
 
     @staticmethod
     def decode(buffer):
-        version_major, version_minor = buffer.read('!BB')
+        version_major, version_minor, = buffer.read('!BB')
         server_properties = buffer.read_table()
         mechanisms = buffer.read_string('!I')
         locales = buffer.read_string('!I')
@@ -62,7 +62,7 @@ class FrameConnectionStart(Frame):
 
 class FrameConnectionStartOk(Frame):
     __slots__ = ('client_properties', 'mechanism', 'response', 'locale')
-    name = 'connection.start_ok'
+    name = 'connection.start-ok'
     method_id = 0x000A000B  # 10,11 655371
     has_content = False
 
@@ -112,7 +112,7 @@ class FrameConnectionSecure(Frame):
 
 class FrameConnectionSecureOk(Frame):
     __slots__ = ('response',)
-    name = 'connection.secure_ok'
+    name = 'connection.secure-ok'
     method_id = 0x000A0015  # 10,21 655381
     has_content = False
 
@@ -138,7 +138,7 @@ class FrameConnectionTune(Frame):
 
     @staticmethod
     def decode(buffer):
-        channel_max, frame_max, heartbeat = buffer.read('!HIH')
+        channel_max, frame_max, heartbeat, = buffer.read('!HIH')
         return FrameConnectionTune(channel_max, frame_max, heartbeat)
 
     def encode(self):
@@ -149,13 +149,13 @@ class FrameConnectionTune(Frame):
 
 class FrameConnectionTuneOk(Frame):
     __slots__ = ('channel_max', 'frame_max', 'heartbeat')
-    name = 'connection.tune_ok'
+    name = 'connection.tune-ok'
     method_id = 0x000A001F  # 10,31 655391
     has_content = False
 
     @staticmethod
     def decode(buffer):
-        channel_max, frame_max, heartbeat = buffer.read('!HIH')
+        channel_max, frame_max, heartbeat, = buffer.read('!HIH')
         return FrameConnectionTuneOk(channel_max, frame_max, heartbeat)
 
     def encode(self):
@@ -174,7 +174,7 @@ class FrameConnectionOpen(Frame):
     def decode(buffer):
         virtual_host = buffer.read_string('!B')
         capabilities = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         insist = bool(bits & 0x1)
         return FrameConnectionOpen(virtual_host, capabilities, insist)
 
@@ -192,7 +192,7 @@ class FrameConnectionOpen(Frame):
 
 class FrameConnectionOpenOk(Frame):
     __slots__ = ('known_hosts',)
-    name = 'connection.open_ok'
+    name = 'connection.open-ok'
     method_id = 0x000A0029  # 10,41 655401
     has_content = False
 
@@ -218,9 +218,9 @@ class FrameConnectionClose(Frame):
 
     @staticmethod
     def decode(buffer):
-        reply_code = buffer.read('!H')
+        reply_code, = buffer.read('!H')
         reply_text = buffer.read_string('!B')
-        class_id, method_id = buffer.read('!HH')
+        class_id, method_id, = buffer.read('!HH')
         return FrameConnectionClose(reply_code, reply_text, class_id, method_id)
 
     def encode(self):
@@ -235,7 +235,7 @@ class FrameConnectionClose(Frame):
 
 class FrameConnectionCloseOk(Frame):
     __slots__ = ()
-    name = 'connection.close_ok'
+    name = 'connection.close-ok'
     method_id = 0x000A0033  # 10,51 655411
     has_content = False
 
@@ -271,7 +271,7 @@ class FrameChannelOpen(Frame):
 
 class FrameChannelOpenOk(Frame):
     __slots__ = ('channel_id',)
-    name = 'channel.open_ok'
+    name = 'channel.open-ok'
     method_id = 0x0014000B  # 20,11 1310731
     has_content = False
 
@@ -297,7 +297,7 @@ class FrameChannelFlow(Frame):
 
     @staticmethod
     def decode(buffer):
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         active = bool(bits & 0x1)
         return FrameChannelFlow(active)
 
@@ -309,13 +309,13 @@ class FrameChannelFlow(Frame):
 
 class FrameChannelFlowOk(Frame):
     __slots__ = ('active',)
-    name = 'channel.flow_ok'
+    name = 'channel.flow-ok'
     method_id = 0x00140015  # 20,21 1310741
     has_content = False
 
     @staticmethod
     def decode(buffer):
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         active = bool(bits & 0x1)
         return FrameChannelFlowOk(active)
 
@@ -333,9 +333,9 @@ class FrameChannelClose(Frame):
 
     @staticmethod
     def decode(buffer):
-        reply_code = buffer.read('!H')
+        reply_code, = buffer.read('!H')
         reply_text = buffer.read_string('!B')
-        class_id, method_id = buffer.read('!HH')
+        class_id, method_id, = buffer.read('!HH')
         return FrameChannelClose(reply_code, reply_text, class_id, method_id)
 
     def encode(self):
@@ -350,7 +350,7 @@ class FrameChannelClose(Frame):
 
 class FrameChannelCloseOk(Frame):
     __slots__ = ()
-    name = 'channel.close_ok'
+    name = 'channel.close-ok'
     method_id = 0x00140029  # 20,41 1310761
     has_content = False
 
@@ -364,6 +364,50 @@ class FrameChannelCloseOk(Frame):
         )
 
 
+class FrameAccessRequest(Frame):
+    __slots__ = ('realm', 'exclusive', 'passive', 'active', 'write', 'read')
+    name = 'access.request'
+    method_id = 0x001E000A  # 30,10 1966090
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        realm = buffer.read_string('!B')
+        bits, = buffer.read('!B')
+        exclusive = bool(bits & 0x1)
+        passive = bool(bits & 0x2)
+        active = bool(bits & 0x4)
+        write = bool(bits & 0x8)
+        read = bool(bits & 0x10)
+        return FrameAccessRequest(realm, exclusive, passive, active, write, read)
+
+    def encode(self):
+        yield (0x01,
+            ''.join([
+                struct.pack('!IB', self.method_id, len(self.realm)),
+                self.realm,
+                struct.pack('!B', (self.exclusive and 0x1 or 0) | (self.passive and 0x2 or 0) | (self.active and 0x4 or 0) | (self.write and 0x8 or 0) | (self.read and 0x10 or 0)),
+            ])
+        )
+
+
+class FrameAccessRequestOk(Frame):
+    __slots__ = ('ticket',)
+    name = 'access.request-ok'
+    method_id = 0x001E000B  # 30,11 1966091
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        ticket, = buffer.read('!H')
+        return FrameAccessRequestOk(ticket)
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!IH', self.method_id, self.ticket),
+        )
+
+
 class FrameExchangeDeclare(Frame):
     __slots__ = ('ticket', 'exchange', 'type', 'passive', 'durable', 'auto_delete', 'internal', 'nowait', 'arguments')
     name = 'exchange.declare'
@@ -372,10 +416,10 @@ class FrameExchangeDeclare(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         exchange = buffer.read_string('!B')
         type = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         passive = bool(bits & 0x1)
         durable = bool(bits & 0x2)
         auto_delete = bool(bits & 0x4)
@@ -400,7 +444,7 @@ class FrameExchangeDeclare(Frame):
 
 class FrameExchangeDeclareOk(Frame):
     __slots__ = ()
-    name = 'exchange.declare_ok'
+    name = 'exchange.declare-ok'
     method_id = 0x0028000B  # 40,11 2621451
     has_content = False
 
@@ -422,9 +466,9 @@ class FrameExchangeDelete(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         exchange = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         if_unused = bool(bits & 0x1)
         nowait = bool(bits & 0x2)
         return FrameExchangeDelete(ticket, exchange, if_unused, nowait)
@@ -441,7 +485,7 @@ class FrameExchangeDelete(Frame):
 
 class FrameExchangeDeleteOk(Frame):
     __slots__ = ()
-    name = 'exchange.delete_ok'
+    name = 'exchange.delete-ok'
     method_id = 0x00280015  # 40,21 2621461
     has_content = False
 
@@ -463,11 +507,11 @@ class FrameExchangeBind(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         destination = buffer.read_string('!B')
         source = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         nowait = bool(bits & 0x1)
         arguments = buffer.read_table()
         return FrameExchangeBind(ticket, destination, source, routing_key, nowait, arguments)
@@ -490,7 +534,7 @@ class FrameExchangeBind(Frame):
 
 class FrameExchangeBindOk(Frame):
     __slots__ = ()
-    name = 'exchange.bind_ok'
+    name = 'exchange.bind-ok'
     method_id = 0x0028001F  # 40,31 2621471
     has_content = False
 
@@ -512,11 +556,11 @@ class FrameExchangeUnbind(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         destination = buffer.read_string('!B')
         source = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         nowait = bool(bits & 0x1)
         arguments = buffer.read_table()
         return FrameExchangeUnbind(ticket, destination, source, routing_key, nowait, arguments)
@@ -539,7 +583,7 @@ class FrameExchangeUnbind(Frame):
 
 class FrameExchangeUnbindOk(Frame):
     __slots__ = ()
-    name = 'exchange.unbind_ok'
+    name = 'exchange.unbind-ok'
     method_id = 0x00280033  # 40,51 2621491
     has_content = False
 
@@ -561,9 +605,9 @@ class FrameQueueDeclare(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         passive = bool(bits & 0x1)
         durable = bool(bits & 0x2)
         exclusive = bool(bits & 0x4)
@@ -586,14 +630,14 @@ class FrameQueueDeclare(Frame):
 
 class FrameQueueDeclareOk(Frame):
     __slots__ = ('queue', 'message_count', 'consumer_count')
-    name = 'queue.declare_ok'
+    name = 'queue.declare-ok'
     method_id = 0x0032000B  # 50,11 3276811
     has_content = False
 
     @staticmethod
     def decode(buffer):
         queue = buffer.read_string('!B')
-        message_count, consumer_count = buffer.read('!II')
+        message_count, consumer_count, = buffer.read('!II')
         return FrameQueueDeclareOk(queue, message_count, consumer_count)
 
     def encode(self):
@@ -614,11 +658,11 @@ class FrameQueueBind(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
         exchange = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         nowait = bool(bits & 0x1)
         arguments = buffer.read_table()
         return FrameQueueBind(ticket, queue, exchange, routing_key, nowait, arguments)
@@ -641,7 +685,7 @@ class FrameQueueBind(Frame):
 
 class FrameQueueBindOk(Frame):
     __slots__ = ()
-    name = 'queue.bind_ok'
+    name = 'queue.bind-ok'
     method_id = 0x00320015  # 50,21 3276821
     has_content = False
 
@@ -663,9 +707,9 @@ class FrameQueuePurge(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         nowait = bool(bits & 0x1)
         return FrameQueuePurge(ticket, queue, nowait)
 
@@ -681,13 +725,13 @@ class FrameQueuePurge(Frame):
 
 class FrameQueuePurgeOk(Frame):
     __slots__ = ('message_count',)
-    name = 'queue.purge_ok'
+    name = 'queue.purge-ok'
     method_id = 0x0032001F  # 50,31 3276831
     has_content = False
 
     @staticmethod
     def decode(buffer):
-        message_count = buffer.read('!I')
+        message_count, = buffer.read('!I')
         return FrameQueuePurgeOk(message_count)
 
     def encode(self):
@@ -704,9 +748,9 @@ class FrameQueueDelete(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         if_unused = bool(bits & 0x1)
         if_empty = bool(bits & 0x2)
         nowait = bool(bits & 0x4)
@@ -724,13 +768,13 @@ class FrameQueueDelete(Frame):
 
 class FrameQueueDeleteOk(Frame):
     __slots__ = ('message_count',)
-    name = 'queue.delete_ok'
+    name = 'queue.delete-ok'
     method_id = 0x00320029  # 50,41 3276841
     has_content = False
 
     @staticmethod
     def decode(buffer):
-        message_count = buffer.read('!I')
+        message_count, = buffer.read('!I')
         return FrameQueueDeleteOk(message_count)
 
     def encode(self):
@@ -747,7 +791,7 @@ class FrameQueueUnbind(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
         exchange = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
@@ -771,7 +815,7 @@ class FrameQueueUnbind(Frame):
 
 class FrameQueueUnbindOk(Frame):
     __slots__ = ()
-    name = 'queue.unbind_ok'
+    name = 'queue.unbind-ok'
     method_id = 0x00320033  # 50,51 3276851
     has_content = False
 
@@ -793,7 +837,7 @@ class FrameBasicQos(Frame):
 
     @staticmethod
     def decode(buffer):
-        prefetch_size, prefetch_count, bits = buffer.read('!IHB')
+        prefetch_size, prefetch_count, bits, = buffer.read('!IHB')
         global_ = bool(bits & 0x1)
         return FrameBasicQos(prefetch_size, prefetch_count, global_)
 
@@ -805,7 +849,7 @@ class FrameBasicQos(Frame):
 
 class FrameBasicQosOk(Frame):
     __slots__ = ()
-    name = 'basic.qos_ok'
+    name = 'basic.qos-ok'
     method_id = 0x003C000B  # 60,11 3932171
     has_content = False
 
@@ -827,10 +871,10 @@ class FrameBasicConsume(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
         consumer_tag = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         no_local = bool(bits & 0x1)
         no_ack = bool(bits & 0x2)
         exclusive = bool(bits & 0x4)
@@ -854,7 +898,7 @@ class FrameBasicConsume(Frame):
 
 class FrameBasicConsumeOk(Frame):
     __slots__ = ('consumer_tag',)
-    name = 'basic.consume_ok'
+    name = 'basic.consume-ok'
     method_id = 0x003C0015  # 60,21 3932181
     has_content = False
 
@@ -881,7 +925,7 @@ class FrameBasicCancel(Frame):
     @staticmethod
     def decode(buffer):
         consumer_tag = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         nowait = bool(bits & 0x1)
         return FrameBasicCancel(consumer_tag, nowait)
 
@@ -897,7 +941,7 @@ class FrameBasicCancel(Frame):
 
 class FrameBasicCancelOk(Frame):
     __slots__ = ('consumer_tag',)
-    name = 'basic.cancel_ok'
+    name = 'basic.cancel-ok'
     method_id = 0x003C001F  # 60,31 3932191
     has_content = False
 
@@ -924,10 +968,10 @@ class FrameBasicPublish(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         exchange = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         mandatory = bool(bits & 0x1)
         immediate = bool(bits & 0x2)
         return FrameBasicPublish(ticket, exchange, routing_key, mandatory, immediate)
@@ -953,7 +997,7 @@ class FrameBasicReturn(Frame):
 
     @staticmethod
     def decode(buffer):
-        reply_code = buffer.read('!H')
+        reply_code, = buffer.read('!H')
         reply_text = buffer.read_string('!B')
         exchange = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
@@ -982,7 +1026,7 @@ class FrameBasicDeliver(Frame):
     @staticmethod
     def decode(buffer):
         consumer_tag = buffer.read_string('!B')
-        delivery_tag, bits = buffer.read('!QB')
+        delivery_tag, bits, = buffer.read('!QB')
         redelivered = bool(bits & 0x1)
         exchange = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
@@ -1009,9 +1053,9 @@ class FrameBasicGet(Frame):
 
     @staticmethod
     def decode(buffer):
-        ticket = buffer.read('!H')
+        ticket, = buffer.read('!H')
         queue = buffer.read_string('!B')
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         no_ack = bool(bits & 0x1)
         return FrameBasicGet(ticket, queue, no_ack)
 
@@ -1027,18 +1071,18 @@ class FrameBasicGet(Frame):
 
 class FrameBasicGetOk(Frame):
     __slots__ = ('delivery_tag', 'redelivered', 'exchange', 'routing_key', 'message_count')
-    name = 'basic.get_ok'
+    name = 'basic.get-ok'
     method_id = 0x003C0047  # 60,71 3932231
     has_content = True
     class_id = CLASS_BASIC
 
     @staticmethod
     def decode(buffer):
-        delivery_tag, bits = buffer.read('!QB')
+        delivery_tag, bits, = buffer.read('!QB')
         redelivered = bool(bits & 0x1)
         exchange = buffer.read_string('!B')
         routing_key = buffer.read_string('!B')
-        message_count = buffer.read('!I')
+        message_count, = buffer.read('!I')
         return FrameBasicGetOk(delivery_tag, redelivered, exchange, routing_key, message_count)
 
     def encode(self):
@@ -1055,7 +1099,7 @@ class FrameBasicGetOk(Frame):
 
 class FrameBasicGetEmpty(Frame):
     __slots__ = ('cluster_id',)
-    name = 'basic.get_empty'
+    name = 'basic.get-empty'
     method_id = 0x003C0048  # 60,72 3932232
     has_content = False
 
@@ -1081,7 +1125,7 @@ class FrameBasicAck(Frame):
 
     @staticmethod
     def decode(buffer):
-        delivery_tag, bits = buffer.read('!QB')
+        delivery_tag, bits, = buffer.read('!QB')
         multiple = bool(bits & 0x1)
         return FrameBasicAck(delivery_tag, multiple)
 
@@ -1099,7 +1143,7 @@ class FrameBasicReject(Frame):
 
     @staticmethod
     def decode(buffer):
-        delivery_tag, bits = buffer.read('!QB')
+        delivery_tag, bits, = buffer.read('!QB')
         requeue = bool(bits & 0x1)
         return FrameBasicReject(delivery_tag, requeue)
 
@@ -1111,13 +1155,13 @@ class FrameBasicReject(Frame):
 
 class FrameBasicRecoverAsync(Frame):
     __slots__ = ('requeue',)
-    name = 'basic.recover_async'
+    name = 'basic.recover-async'
     method_id = 0x003C0064  # 60,100 3932260
     has_content = False
 
     @staticmethod
     def decode(buffer):
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         requeue = bool(bits & 0x1)
         return FrameBasicRecoverAsync(requeue)
 
@@ -1135,7 +1179,7 @@ class FrameBasicRecover(Frame):
 
     @staticmethod
     def decode(buffer):
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         requeue = bool(bits & 0x1)
         return FrameBasicRecover(requeue)
 
@@ -1147,7 +1191,7 @@ class FrameBasicRecover(Frame):
 
 class FrameBasicRecoverOk(Frame):
     __slots__ = ()
-    name = 'basic.recover_ok'
+    name = 'basic.recover-ok'
     method_id = 0x003C006F  # 60,111 3932271
     has_content = False
 
@@ -1169,7 +1213,7 @@ class FrameBasicNack(Frame):
 
     @staticmethod
     def decode(buffer):
-        delivery_tag, bits = buffer.read('!QB')
+        delivery_tag, bits, = buffer.read('!QB')
         multiple = bool(bits & 0x1)
         requeue = bool(bits & 0x2)
         return FrameBasicNack(delivery_tag, multiple, requeue)
@@ -1177,6 +1221,102 @@ class FrameBasicNack(Frame):
     def encode(self):
         yield (0x01,
             struct.pack('!IQB', self.method_id, self.delivery_tag, (self.multiple and 0x1 or 0) | (self.requeue and 0x2 or 0)),
+        )
+
+
+class FrameTxSelect(Frame):
+    __slots__ = ()
+    name = 'tx.select'
+    method_id = 0x005A000A  # 90,10 5898250
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        return FrameTxSelect()
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!I', self.method_id),
+        )
+
+
+class FrameTxSelectOk(Frame):
+    __slots__ = ()
+    name = 'tx.select-ok'
+    method_id = 0x005A000B  # 90,11 5898251
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        return FrameTxSelectOk()
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!I', self.method_id),
+        )
+
+
+class FrameTxCommit(Frame):
+    __slots__ = ()
+    name = 'tx.commit'
+    method_id = 0x005A0014  # 90,20 5898260
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        return FrameTxCommit()
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!I', self.method_id),
+        )
+
+
+class FrameTxCommitOk(Frame):
+    __slots__ = ()
+    name = 'tx.commit-ok'
+    method_id = 0x005A0015  # 90,21 5898261
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        return FrameTxCommitOk()
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!I', self.method_id),
+        )
+
+
+class FrameTxRollback(Frame):
+    __slots__ = ()
+    name = 'tx.rollback'
+    method_id = 0x005A001E  # 90,30 5898270
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        return FrameTxRollback()
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!I', self.method_id),
+        )
+
+
+class FrameTxRollbackOk(Frame):
+    __slots__ = ()
+    name = 'tx.rollback-ok'
+    method_id = 0x005A001F  # 90,31 5898271
+    has_content = False
+
+    @staticmethod
+    def decode(buffer):
+        return FrameTxRollbackOk()
+
+    def encode(self):
+        yield (0x01,
+            struct.pack('!I', self.method_id),
         )
 
 
@@ -1188,7 +1328,7 @@ class FrameConfirmSelect(Frame):
 
     @staticmethod
     def decode(buffer):
-        bits = buffer.read('!B')
+        bits, = buffer.read('!B')
         nowait = bool(bits & 0x1)
         return FrameConfirmSelect(nowait)
 
@@ -1200,7 +1340,7 @@ class FrameConfirmSelect(Frame):
 
 class FrameConfirmSelectOk(Frame):
     __slots__ = ()
-    name = 'confirm.select_ok'
+    name = 'confirm.select-ok'
     method_id = 0x0055000B  # 85,11 5570571
     has_content = False
 
@@ -1226,9 +1366,9 @@ def decode_basic_properties(buffer):
     if (flags & 0x2000): # 1 << 13
         props['headers'] = buffer.read_table()
     if (flags & 0x1000): # 1 << 12
-        props['delivery_mode'] = buffer.read('!B')
+        props['delivery_mode'], = buffer.read('!B')
     if (flags & 0x0800): # 1 << 11
-        props['priority'] = buffer.read('!B')
+        props['priority'], = buffer.read('!B')
     if (flags & 0x0400): # 1 << 10
         props['correlation_id'] = buffer.read_string('!B')
     if (flags & 0x0200): # 1 << 9
@@ -1238,7 +1378,7 @@ def decode_basic_properties(buffer):
     if (flags & 0x0080): # 1 << 7
         props['message_id'] = buffer.read_string('!B')
     if (flags & 0x0040): # 1 << 6
-        props['timestamp'] = buffer.read('!Q')
+        props['timestamp'], = buffer.read('!Q')
     if (flags & 0x0020): # 1 << 5
         props['type'] = buffer.read_string('!B')
     if (flags & 0x0010): # 1 << 4
@@ -1482,7 +1622,7 @@ class FrameWriter(object):
         self._send(FrameConnectionOpen(virtual_host, '', 0))
 
     @syncmethod('connection.close-ok')
-    def connection_close(self, reply_code=None, reply_text='', class_id=None, method_id=None):
+    def connection_close(self, reply_code=200, reply_text='', class_id=0, method_id=0):
         """This method indicates that the sender wants to close the connection.
 
         This may be due to internal conditions (e.g. a forced shut-down) or due
@@ -1536,7 +1676,7 @@ class FrameWriter(object):
         self._send(FrameChannelFlowOk(active))
 
     @syncmethod('channel.close-ok')
-    def channel_close(self, reply_code=None, reply_text='', class_id=None, method_id=None):
+    def channel_close(self, reply_code=200, reply_text='', class_id=0, method_id=0):
         """This method indicates that the sender wants to close the channel.
 
         This may be due to internal conditions (e.g. a forced shut-down) or due
@@ -1557,6 +1697,12 @@ class FrameWriter(object):
         that it is safe to release resources for the channel.
         """
         self._send(FrameChannelCloseOk())
+
+    def access_request(self, realm='/data', exclusive=False, passive=True, active=True, write=True, read=True):
+        self._send(FrameAccessRequest(realm, exclusive, passive, active, write, read))
+
+    def access_request_ok(self, ):
+        self._send(FrameAccessRequestOk(0))
 
     @syncmethod('exchange.declare-ok')
     def exchange_declare(self, exchange=None, type='direct', passive=False, durable=False, auto_delete=False, internal=False, arguments={}):
@@ -1580,6 +1726,13 @@ class FrameWriter(object):
         restarts. Non-durable exchanges (transient exchanges) are purged
         if/when a server restarts.
 
+        :param auto_delete: If set, the exchange is deleted when all queues
+        have finished using it.
+
+        :param internal: If set, the exchange may not be used directly by
+        publishers, but only when bound to other exchanges. Internal exchanges
+        are used to construct wiring that is not visible to applications.
+
         :param arguments: A set of arguments for the declaration. The syntax
         and semantics of these arguments depends on the server implementation.
         """
@@ -1597,10 +1750,36 @@ class FrameWriter(object):
         """
         self._send(FrameExchangeDelete(0, exchange, if_unused, 0))
 
+    @syncmethod('exchange.bind-ok')
     def exchange_bind(self, destination=None, source=None, routing_key='', arguments={}):
+        """This method binds an exchange to an exchange.
+
+        :param destination: Specifies the name of the destination exchange to bind.
+
+        :param source: Specifies the name of the source exchange to bind.
+
+        :param routing_key: Specifies the routing key for the binding. The
+        routing key is used for routing messages depending on the exchange
+        configuration. Not all exchanges use a routing key - refer to the
+        specific exchange documentation.
+
+        :param arguments: A set of arguments for the binding. The syntax and
+        semantics of these arguments depends on the exchange class.
+        """
         self._send(FrameExchangeBind(0, destination, source, routing_key, 0, arguments))
 
+    @syncmethod('exchange.unbind-ok')
     def exchange_unbind(self, destination=None, source=None, routing_key='', arguments={}):
+        """This method unbinds an exchange from an exchange.
+
+        :param destination: Specifies the name of the destination exchange to unbind.
+
+        :param source: Specifies the name of the source exchange to unbind.
+
+        :param routing_key: Specifies the routing key of the binding to unbind.
+
+        :param arguments: Specifies the arguments of the binding to unbind.
+        """
         self._send(FrameExchangeUnbind(0, destination, source, routing_key, 0, arguments))
 
     @syncmethod('queue.declare-ok')
@@ -1768,11 +1947,19 @@ class FrameWriter(object):
         This does not affect already delivered messages, but it does mean the
         server will not send any more messages for that consumer. The client
         may receive an arbitrary number of messages in between sending the
-        cancel method and receiving the cancel-ok reply.
+        cancel method and receiving the cancel-ok reply. It may also be sent
+        from the server to the client in the event of the consumer being
+        unexpectedly cancelled (i.e. cancelled for any reason other than the
+        server receiving the corresponding basic.cancel from the client). This
+        allows clients to be notified of the loss of consumers due to events
+        such as queue deletion. Note that as it is not a MUST for clients to
+        accept this method from the client, it is advisable for the broker to
+        be able to identify those clients that are capable of accepting the
+        method, through some means of capability negotiation.
         """
         self._send(FrameBasicCancel(consumer_tag, 0))
 
-    def basic_publish(self, exchange='', routing_key='', mandatory=False, immediate=False, headers={}, payload=''):
+    def basic_publish(self, exchange='', routing_key='', mandatory=False, immediate=False, headers={}, body=''):
         """This method publishes a message to a specific exchange.
 
         The message will be routed to queues as defined by the exchange
@@ -1798,7 +1985,7 @@ class FrameWriter(object):
         method. If this flag is zero, the server will queue the message, but
         with no guarantee that it will ever be consumed.
         """
-        self._send_message(FrameBasicPublish(0, exchange, routing_key, mandatory, immediate), headers, payload)
+        self._send_message(FrameBasicPublish(0, exchange, routing_key, mandatory, immediate), headers, body)
 
     @syncmethod('basic.get-ok', 'basic.get-empty')
     def basic_get(self, queue='', no_ack=False):
@@ -1811,21 +1998,23 @@ class FrameWriter(object):
         self._send(FrameBasicGet(0, queue, no_ack))
 
     def basic_ack(self, delivery_tag=0, multiple=False):
-        """This method acknowledges one or more messages delivered via the Deliver
-        or Get-Ok methods.
+        """When sent by the client, this method acknowledges one or more messages
+        delivered via the Deliver or Get-Ok methods.
 
-        The client can ask to confirm a single message or a set of messages up
-        to and including a specific message.
+        When sent by server, this method acknowledges one or more messages
+        published with the Publish method on a channel in confirm mode. The
+        acknowledgement can be for a single message or a set of messages up to
+        and including a specific message.
 
         :param multiple: If set to 1, the delivery tag is treated as "up to and
-        including", so that the client can acknowledge multiple messages with a
-        single method. If set to zero, the delivery tag refers to a single
-        message. If the multiple field is 1, and the delivery tag is zero,
-        tells the server to acknowledge all outstanding messages.
+        including", so that multiple messages can be acknowledged with a single
+        method. If set to zero, the delivery tag refers to a single message. If
+        the multiple field is 1, and the delivery tag is zero, this indicates
+        acknowledgement of all outstanding messages.
         """
         self._send(FrameBasicAck(delivery_tag, multiple))
 
-    def basic_reject(self, delivery_tag=None, requeue=True):
+    def basic_reject(self, delivery_tag=0, requeue=True):
         """This method allows a client to reject a message.
 
         It can be used to interrupt and cancel large incoming messages, or
@@ -1866,7 +2055,64 @@ class FrameWriter(object):
         self._send(FrameBasicRecover(requeue))
 
     def basic_nack(self, delivery_tag=0, multiple=False, requeue=True):
+        """This method allows a client to reject one or more incoming messages.
+
+        It can be used to interrupt and cancel large incoming messages, or
+        return untreatable messages to their original queue. This method is
+        also used by the server to inform publishers on channels in confirm
+        mode of unhandled messages. If a publisher receives this method, it
+        probably needs to republish the offending messages.
+
+        :param multiple: If set to 1, the delivery tag is treated as "up to and
+        including", so that multiple messages can be rejected with a single
+        method. If set to zero, the delivery tag refers to a single message. If
+        the multiple field is 1, and the delivery tag is zero, this indicates
+        rejection of all outstanding messages.
+
+        :param requeue: If requeue is true, the server will attempt to requeue
+        the message. If requeue is false or the requeue attempt fails the
+        messages are discarded or dead-lettered. Clients receiving the Nack
+        methods should ignore this flag.
+        """
         self._send(FrameBasicNack(delivery_tag, multiple, requeue))
 
+    @syncmethod('tx.select-ok')
+    def tx_select(self, ):
+        """This method sets the channel to use standard transactions.
+
+        The client must use this method at least once on a channel before using
+        the Commit or Rollback methods.
+        """
+        self._send(FrameTxSelect())
+
+    @syncmethod('tx.commit-ok')
+    def tx_commit(self, ):
+        """This method commits all message publications and acknowledgments
+        performed in the current transaction.
+
+        A new transaction starts immediately after a commit.
+        """
+        self._send(FrameTxCommit())
+
+    @syncmethod('tx.rollback-ok')
+    def tx_rollback(self, ):
+        """This method abandons all message publications and acknowledgments
+        performed in the current transaction.
+
+        A new transaction starts immediately after a rollback. Note that
+        unacked messages will not be automatically redelivered by rollback; if
+        that is required an explicit recover call should be issued.
+        """
+        self._send(FrameTxRollback())
+
+    @syncmethod('confirm.select-ok')
     def confirm_select(self, ):
+        """This method sets the channel to use publisher acknowledgements.
+
+        The client can only use this method on a non-transactional channel.
+
+        :param nowait: If set, the server will not respond to the method. The
+        client should not wait for a reply method. If the server could not
+        complete the method it will raise a channel or connection exception.
+        """
         self._send(FrameConfirmSelect(0))
