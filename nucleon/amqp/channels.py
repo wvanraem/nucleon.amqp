@@ -312,48 +312,69 @@ class StartChannel(Channel):
         self.connection._on_connect()
 
 
+class MessageQueue(Queue):
+    """A queue that can receive exceptions."""
+    def __init__(self, channel, consumer_tag):
+        self.consumer_tag = consumer_tag
+        self.channel = channel
+        super(MessageQueue, self).__init__()
+
+    def get(self, block=True, timeout=None):
+        resp = super(MessageQueue, self).get(block=block, timeout=timeout)
+        if isinstance(resp, Exception):
+            raise resp
+        return resp
+
+    def get_nowait(self):
+        self.get(False)
+
+    def cancel(self):
+        self.channel.basic_cancel(self.consumer_tag)
+
+
 class MessageChannel(Channel):
     def __init__(self, connection, id):
         super(MessageChannel, self).__init__(connection, id)
+        self.consumer_id = 1
+        self.consumers = {}
+        self.listeners.set_handler('basic.deliver', self.on_deliver)
+        self.listeners.set_handler('basic.cancel-ok', self.on_cancel_ok)
 
-    def consume(self, callback=None, *args, **kwargs):
+    def on_deliver(self, message):
+        """Queue the message for delivery."""
+        self.consumers[message.consumer_tag](message)
+
+    def on_error(self, exc):
+        """Override on_error, to pass error to all consumers."""
+        for consumer in self.consumers.values():
+            self.queue.put((consumer, exc))
+        super(MessageChannel, self).on_error(exc)
+
+    def on_cancel_ok(self, frame):
+        """The server has cancelled a consumer.
+
+        We can remove its consumer tag from the registered consumers."""
+        del(self.consumers[frame.consumer_tag])
+
+    def basic_consume(self, callback=None, **kwargs):
+        """Register a consumer for an AMQP queue.
+
+        If a callback is given, this will be called on any message.
+
         """
-        Register a consumer for an AMQP queue.
+        tag = 'ct-%d' % self.consumer_id
+        self.consumer_id += 1
+        kwargs['consumer_tag'] = tag
 
-        If callback is not provided, returns the result dictionary of the first
-        message it receives in the queue.
-
-        Asynchronous mode:
-        If a callback function is provided, it runs the consume command returns
-        the consume-promise only. The callback function will then be called
-        with the result of the consume call.
-        """
-        log.debug("consume *%r **%r", args, kwargs)
-        if not callback:
-            r = AsyncResult()
-
-            def temp_callback(p, res):
-                if 'body' in res:
-                    msg = Message(self, res)
-                    log.debug('received %r', msg)
-                    r.set(msg)
-
-            self.basic_get(
-                callback=temp_callback, *args, **kwargs)
-
-            self.must_now_block()
-            result = r.get()
-            return result
+        if callback is not None:
+            self.consumers[tag] = callback
+            return super(MessageChannel, self).basic_consume(**kwargs)
         else:
-            def callback_wrapper(p, res):
-                if 'body' in res:
-                    msg = Message(self, res)
-                    log.debug('received %r', msg)
-                    callback(msg)
-
-            consume_promise = self.conn.basic_consume(
-                                callback=callback_wrapper, *args, **kwargs)
-            return consume_promise
+            queue = MessageQueue(self, tag)
+            self.consumers[tag] = queue.put
+            queue.consumer_tag = tag
+            super(MessageChannel, self).basic_consume(**kwargs)
+            return queue
 
     def _run_with_callback(self, method, *args, **kwargs):
         """

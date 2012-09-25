@@ -5,11 +5,14 @@ import os
 from nucleon.amqp import Connection
 from nucleon.amqp import exceptions
 
+from gevent.queue import Queue, Empty
+from gevent import Timeout
+
 import base
 
 
 class TestBasic(base.TestCase):
-    def test_simple_roundtrip(self):
+    def test_consume_queue(self):
         client = Connection(self.amqp_url)
         client.connect()
 
@@ -20,7 +23,29 @@ class TestBasic(base.TestCase):
                 routing_key=self.name,
                 body=self.msg
             )
-            result = channel.basic_consume(queue=self.name, no_ack=True)
+
+            queue = channel.basic_consume(queue=self.name, no_ack=True)
+            result = queue.get()
+
+            self.assertEqual(result.body, self.msg)
+            channel.queue_delete(queue=self.name)
+
+    def test_consume_callback(self):
+        client = Connection(self.amqp_url)
+        client.connect()
+
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
+            channel.basic_publish(
+                exchange='',
+                routing_key=self.name,
+                body=self.msg
+            )
+
+            queue = Queue()
+            channel.basic_consume(callback=queue.put, queue=self.name, no_ack=True)
+            result = queue.get()
+
             self.assertEqual(result.body, self.msg)
             channel.queue_delete(queue=self.name)
 
@@ -74,390 +99,289 @@ class TestBasic(base.TestCase):
 
     def test_basic_publish_bad_exchange(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        for i in range(2):
-            promise = client.basic_publish(exchange='invalid_exchange',
-                                           routing_key='xxx', body='')
-
-            self.assertEqual(len(client.channels.free_channels), 0)
-            self.assertEqual(client.channels.free_channel_numbers[-1], 2)
-
-            with self.assertRaises(exceptions.NotFound) as cm:
-                client.wait(promise)
-
-            (r,) = cm.exception # unpack args of exception
-            self.assertTrue(r.is_error)
-            self.assertEqual(r['reply_code'], 404)
-
-            self.assertEqual(len(client.channels.free_channels), 0)
-            self.assertEqual(client.channels.free_channel_numbers[-1], 2)
-
+        with client.channel() as channel:
+            with self.assertRaises(exceptions.NotFound):
+                channel.basic_publish(
+                    exchange='invalid_exchange',
+                    routing_key='xxx', body='')
 
     def test_basic_return(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       mandatory=True, body='')
-        with self.assertRaises(exceptions.NoRoute):
-            client.wait(promise)
+        with client.channel() as channel:
+            with self.assertRaises(exceptions.NoRoute):
+                channel.basic_publish(exchange='', routing_key=self.name,
+                                               mandatory=True, body='')
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       mandatory=True, body='')
-        client.wait(promise) # no error
+            client.basic_publish(exchange='', routing_key=self.name,
+                                           mandatory=True, body='')
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       immediate=True, body='')
-        with self.assertRaises(puka.NoConsumers):
-            r = client.wait(promise)
-            print r
+            with self.assertRaises(exceptions.NoConsumers):
+                client.basic_publish(exchange='', routing_key=self.name,
+                                           immediate=True, body='')
 
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
+        with client.channel() as channel:
+            channel.queue_delete(queue=self.name)
 
     def test_persistent(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body=self.msg) # persistence=default
-        client.wait(promise)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body=self.msg)  # persistence=default
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body=self.msg,
-                                       headers={'delivery_mode':2})
-        client.wait(promise)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body=self.msg,
+                                           headers={'delivery_mode': 2})
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body=self.msg,
-                                       headers={'delivery_mode':1})
-        client.wait(promise)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body=self.msg,
+                                           headers={'delivery_mode': 1})
 
-        promise = client.basic_get(queue=self.name, no_ack=True)
-        result = client.wait(promise)
-        self.assertTrue('delivery_mode' not in result['headers'])
+            result = channel.basic_get(queue=self.name, no_ack=True)
+            self.assertTrue('delivery_mode' not in result.headers)
 
-        promise = client.basic_get(queue=self.name, no_ack=True)
-        result = client.wait(promise)
-        self.assertTrue('delivery_mode' in result['headers'])
-        self.assertEquals(result['headers']['delivery_mode'], 2)
+            result = channel.basic_get(queue=self.name, no_ack=True)
+            self.assertTrue('delivery_mode' in result.headers)
+            self.assertEquals(result['headers']['delivery_mode'], 2)
 
-        promise = client.basic_get(queue=self.name, no_ack=True)
-        result = client.wait(promise)
-        self.assertTrue('delivery_mode' in result['headers'])
-        self.assertEquals(result['headers']['delivery_mode'], 1)
+            result = channel.basic_get(queue=self.name, no_ack=True)
+            self.assertTrue('delivery_mode' in result.headers)
+            self.assertEquals(result.headers['delivery_mode'], 1)
 
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
+            channel.queue_delete(queue=self.name)
 
     def test_basic_reject(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='a')
-        client.wait(promise)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body='a')
 
-        t = client.basic_get(queue=self.name)
-        r = client.wait(t)
-        self.assertEqual(r['body'], 'a')
-        self.assertTrue(not r['redelivered'])
-        client.basic_reject(r)
+            r = channel.basic_get(queue=self.name)
+            self.assertEqual(r.body, 'a')
+            self.assertTrue(not r.redelivered)
+            channel.basic_reject(r)
 
-        t = client.basic_get(queue=self.name)
-        r = client.wait(t)
-        self.assertEqual(r['body'], 'a')
-        self.assertTrue(r['redelivered'])
+            r = channel.basic_get(queue=self.name)
+            self.assertEqual(r.body, 'a')
+            self.assertTrue(r.redelivered)
 
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
+            channel.queue_delete(queue=self.name)
 
     def test_basic_reject_no_requeue(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body='a')
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='a')
-        client.wait(promise)
+            r = channel.basic_get(queue=self.name)
+            self.assertEqual(r.body, 'a')
+            self.assertTrue(not r.redelivered)
+            channel.basic_reject(r, requeue=False)
 
-        t = client.basic_get(queue=self.name)
-        r = client.wait(t)
-        self.assertEqual(r['body'], 'a')
-        self.assertTrue(not r['redelivered'])
-        client.basic_reject(r, requeue=False)
+            r = channel.basic_get(queue=self.name)
+            self.assertTrue(r is None)
 
-        t = client.basic_get(queue=self.name)
-        r = client.wait(t)
-        self.assertTrue(r['empty'])
-        self.assertFalse('redelivered' in r)
-        self.assertFalse('body' in r)
-
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
+            channel.queue_delete(queue=self.name)
 
     def test_basic_reject_dead_letter_exchange(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.exchange_declare(exchange=self.name1, type='fanout')
-        client.wait(promise)
+        with client.channel() as channel:
+            channel.exchange_declare(exchange=self.name1, type='fanout')
+            channel.queue_declare(
+                queue=self.name, arguments={'x-dead-letter-exchange': self.name1})
+            channel.queue_declare(exclusive=True)
+            dlxqname = ['queue']
 
-        promise = client.queue_declare(
-            queue=self.name, arguments={'x-dead-letter-exchange': self.name1})
-        client.wait(promise)
+            channel.queue_bind(queue=dlxqname, exchange=self.name1)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body='a')
 
-        promise = client.queue_declare(exclusive=True)
-        dlxqname = client.wait(promise)['queue']
+            r = channel.basic_get(queue=self.name)
+            self.assertEqual(r.body, 'a')
+            self.assertTrue(not r.redelivered)
+            channel.basic_reject(r, requeue=False)
 
-        promise = client.queue_bind(queue=dlxqname, exchange=self.name1)
-        client.wait(promise)
+            r = channel.basic_get(queue=self.name)
+            self.assertTrue(r is None)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='a')
-        client.wait(promise)
+            r = channel.basic_get(queue=dlxqname)
+            self.assertEqual(r.body, 'a')
+            self.assertEqual(r.headers['x-death'][0]['reason'], 'rejected')
+            self.assertTrue(not r.redelivered)
 
-        t = client.basic_get(queue=self.name)
-        r = client.wait(t)
-        self.assertEqual(r['body'], 'a')
-        self.assertTrue(not r['redelivered'])
-        client.basic_reject(r, requeue=False)
-
-        t = client.basic_get(queue=self.name)
-        r = client.wait(t)
-        self.assertTrue(r['empty'])
-        self.assertFalse('redelivered' in r)
-        self.assertFalse('body' in r)
-
-        t = client.basic_get(queue=dlxqname)
-        r = client.wait(t)
-        self.assertEqual(r['body'], 'a')
-        self.assertEqual(r['headers']['x-death'][0]['reason'], 'rejected')
-        self.assertTrue(not r['redelivered'])
-
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
-        promise = client.exchange_delete(exchange=self.name1)
-        client.wait(promise)
-
+            channel.queue_delete(queue=self.name)
+            channel.exchange_delete(exchange=self.name1)
 
     def test_properties(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        t = client.queue_declare(queue=self.name)
-        client.wait(t)
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
 
-        headers = {
-            "content_type": 'a',
-            "content_encoding": 'b',
-            #"headers":
-            "delivery_mode": 2,
-            "priority": 1,
-            "correlation_id": 'd',
-            "reply_to": 'e',
-            "expiration": 'f',
-            "message_id": 'g',
-            "timestamp": 1,
-            "type_": 'h',
-            "user_id": 'guest',  # that one needs to match real user
-            "app_id": 'j',
-            "cluster_id": 'k',
-            "custom": 'l',
-            "blah2": [True, 1, -1, 4611686018427387904L,
-                      -4611686018427387904L, [1,2,3,4, {"a":"b", "c":[]}]],
-            }
+            headers = {
+                "content_type": 'a',
+                "content_encoding": 'b',
+                #"headers":
+                "delivery_mode": 2,
+                "priority": 1,
+                "correlation_id": 'd',
+                "reply_to": 'e',
+                "expiration": 'f',
+                "message_id": 'g',
+                "timestamp": 1,
+                "type_": 'h',
+                "user_id": 'guest',  # that one needs to match real user
+                "app_id": 'j',
+                "cluster_id": 'k',
+                "custom": 'l',
+                "blah2": [True, 1, -1, 4611686018427387904L,
+                          -4611686018427387904L, [1,2,3,4, {"a":"b", "c":[]}]],
+                }
 
-        t = client.basic_publish(exchange='', routing_key=self.name,
-                                 body='a', headers=headers.copy())
-        client.wait(t)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                     body='a', headers=headers.copy())
 
-        t = client.basic_get(queue=self.name, no_ack=True)
-        r = client.wait(t)
-        self.assertEqual(r['body'], 'a')
-        recv_headers = r['headers']
-        del recv_headers['x-puka-delivery-tag']
+            r = channel.basic_get(queue=self.name, no_ack=True)
+            self.assertEqual(r.body, 'a')
+            self.assertEqual(repr(headers), repr(r.headers))
 
-        self.assertEqual(repr(headers), repr(recv_headers))
-
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
+            channel.queue_delete(queue=self.name)
 
     def test_basic_ack_fail(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
+        with client.channel() as channel:
+            channel.queue_declare(queue=self.name)
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body='a')
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+            queue = channel.basic_consume(queue=self.name)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='a')
-        client.wait(promise)
+            with self.assertRaises(exceptions.PreconditionFailed):
+                channel.basic_ack(999)
 
-        promise = client.basic_consume(queue=self.name)
-        result = client.wait(promise)
+        with client.channel() as channel:
+            result = client.basic_consume(queue=self.name)
 
-        with self.assertRaises(puka.PreconditionFailed):
-            r2 = result.copy()
-            r2['delivery_tag'] = 999
-            client.basic_ack(r2)
-            client.wait(promise)
-
-        promise = client.basic_consume(queue=self.name)
-        result = client.wait(promise)
-        client.basic_ack(result)
-
-        with self.assertRaises(AssertionError):
             client.basic_ack(result)
 
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
+            with self.assertRaises(AssertionError):
+                client.basic_ack(result)
 
+            client.queue_delete(queue=self.name)
 
     def test_basic_cancel(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
+        with client.channel() as channel:
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+            channel.queue_declare(queue=self.name)
 
-        for i in range(2):
-            promise = client.basic_publish(exchange='', routing_key=self.name,
-                                           body='a')
-            client.wait(promise)
+            for i in range(2):
+                channel.basic_publish(exchange='', routing_key=self.name,
+                                               body='a')
 
-        consume_promise = client.basic_consume(queue=self.name)
-        msg1 = client.wait(consume_promise)
-        self.assertEqual(msg1['body'], 'a')
-        client.basic_ack(msg1)
+            queue = channel.basic_consume(queue=self.name)
 
-        promise = client.basic_cancel(consume_promise)
-        result = client.wait(promise)
-        self.assertTrue('consumer_tag' in result)
+            for i in range(2):
+                msg1 = queue.get()
+                self.assertEqual(msg1.body, 'a')
+                channel.basic_ack(msg1)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='b')
-        client.wait(promise)
+            result = channel.basic_cancel(queue.consumer_tag)
 
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
+            self.assertEqual(result.consumer_tag, queue.consumer_tag)
 
+            channel.basic_publish(exchange='', routing_key=self.name,
+                                           body='b')
+
+            try:
+                msg = queue.get(1)
+            except Empty:
+                pass
+            else:
+                assert False, "Received message %s" % msg.body
+            channel.queue_delete(queue=self.name)
 
     def test_close(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
-
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body=self.msg)
-        client.wait(promise)
-
-        consume_promise = client.basic_consume(queue=self.name)
-        msg_result = client.wait(consume_promise)
-
-        promise = client.queue_delete(self.name)
-        client.wait(promise)
-
-        promise = client.close()
-        client.wait(promise)
-
+        with client.channel() as channel:
+            channel.close()
 
     def test_basic_consume_fail(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        consume_promise = client.basic_consume(queue='bad_q_name')
-        with self.assertRaises(puka.NotFound):
-            msg_result = client.wait(consume_promise)
-
-        promise = client.close()
-        client.wait(promise)
+        with client.channel() as channel:
+            with self.assertRaises(exceptions.NotFound):
+                channel.basic_consume(queue='bad_q_name')
 
     def test_broken_ack_on_close(self):
         client = Connection(self.amqp_url)
-        promise = client.connect()
-        client.wait(promise)
+        client.connect()
 
-        promise = client.queue_declare()
-        qname = client.wait(promise)['queue']
+        with client.channel() as channel:
+            channel.queue_declare()
+            qname = 'queue'
 
-        promise = client.basic_publish(exchange='', routing_key=qname, body='a')
-        client.wait(promise)
+            channel.basic_publish(exchange='', routing_key=qname, body='a')
 
-        promise = client.basic_get(queue=qname)
-        r = client.wait(promise)
-        self.assertEquals(r['body'], 'a')
+            r = channel.basic_get(queue=qname)
+            self.assertEquals(r.body, 'a')
 
-        promise = client.queue_delete(queue=qname)
-        client.wait(promise)
+            channel.queue_delete(queue=qname)
 
-        promise = client.close()
-        client.wait(promise)
+        client.close()
 
     @base.connect
-    def test_basic_qos(self, client):
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+    def test_basic_qos(self, channel):
+        channel.queue_declare(queue=self.name)
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='a')
-        client.wait(promise)
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='b')
-        client.wait(promise)
-        promise = client.basic_publish(exchange='', routing_key=self.name,
-                                       body='c')
-        client.wait(promise)
+        for msg in 'abc':
+            channel.basic_publish(
+                exchange='',
+                routing_key=self.name,
+                body=msg
+            )
 
-        consume_promise = client.basic_consume(queue=self.name, prefetch_count=1)
-        result = client.wait(consume_promise, timeout=0.1)
-        self.assertEqual(result['body'], 'a')
+        queue = channel.basic_consume(queue=self.name, prefetch_count=1)
+        result = queue.get_nowait()
+        self.assertEqual(result.body, 'a')
 
-        result = client.wait(consume_promise, timeout=0.1)
-        self.assertEqual(result, None)
+        with self.assertRaises(Empty):
+            queue.get_nowait()
 
-        promise = client.basic_qos(consume_promise, prefetch_count=2)
-        result = client.wait(promise)
+        # Now adjust QoS
+        channel.basic_qos(queue.consumer_tag, prefetch_count=2)
+        result = queue.get_nowait()
+        self.assertEqual(result.body, 'b')
 
-        result = client.wait(consume_promise, timeout=0.1)
-        self.assertEqual(result['body'], 'b')
+        with self.assertRaises(Empty):
+            queue.get_nowait()
 
-        result = client.wait(consume_promise, timeout=0.1)
-        self.assertEqual(result, None)
-
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
+        channel.queue_delete(queue=self.name)
 
 
 

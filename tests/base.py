@@ -23,7 +23,8 @@ def connect(method):
     def wrapper(self, *args, **kwargs):
         client = Connection(self.amqp_url)
         client.connect()
-        r = method(self, client, *args, **kwargs)
+        with client.channel() as channel:
+            r = method(self, channel, *args, **kwargs)
         client.close()
         return r
     return wrapper

@@ -16,15 +16,15 @@ class Message(object):
         """
         self.channel = channel
         self._frame = frame
-        self._headers = headers
-        self._body = body
+        self.headers = headers
+        self.body = body
 
     def __getitem__(self, key):
         """Allow attributes to be read with subscript.
 
-        This is for compatibility with the raw frame.
+        This is for backwards compatibility.
         """
-        return self._frame[key]
+        return getattr(self._frame, key)
 
     @property
     def exchange(self):
@@ -35,11 +35,6 @@ class Message(object):
     def routing_key(self):
         """Retrieve the routing key."""
         return self._frame.routing_key
-
-    @property
-    def body(self):
-        """Retrieve the message body."""
-        return self._body
 
     @property
     def redelivered(self):
@@ -61,8 +56,7 @@ class Message(object):
 
     def ack(self, **kwargs):
         """Acknowledge the message."""
-        assert 'promise_number' in self._frame
-        self.conn.ack(self._frame, **kwargs)
+        self.channel.basic_ack(self.delivery_tag, **kwargs)
 
     def reply(self, **kwargs):
         """Publish a new message back to the connection"""
@@ -83,7 +77,7 @@ class Message(object):
             messages to process."
 
         """
-        self.channel.basic_reject(self._frame, **kwargs)
+        self.channel.basic_reject(self.delivery_tag, **kwargs)
 
     def cancel_consume(self, **kwargs):
         """Cancel the consumer."""
