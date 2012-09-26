@@ -12,8 +12,8 @@ METHODS = {}
 class FrameMeta(type):
     def __new__(cls, main, bases, dict):
         t = type.__new__(cls, main, bases, dict)
-        if 'method_id' in dict:
-            METHODS[dict['method_id']] = t
+        if 'METHOD_ID' in dict:
+            METHODS[dict['METHOD_ID']] = t
         return t
 
 

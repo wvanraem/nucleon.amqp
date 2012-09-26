@@ -8,47 +8,40 @@ import base
 
 class TestBasicConsumeMulti(base.TestCase):
     @base.connect
-    def test_shared_qos(self, client):
-        promise = client.queue_declare(queue=self.name1)
-        client.wait(promise)
+    def test_shared_qos(self, channel):
+        channel.queue_declare(queue=self.name1)
+        channel.queue_declare(queue=self.name2)
 
-        promise = client.queue_declare(queue=self.name2)
-        client.wait(promise)
-
-
-        promise = client.basic_publish(exchange='', routing_key=self.name1,
-                                      body='a')
-        client.wait(promise)
-        promise = client.basic_publish(exchange='', routing_key=self.name2,
+        channel.basic_publish(exchange='', routing_key=self.name1,
+                            body='a')
+        channel.basic_publish(exchange='', routing_key=self.name2,
                                       body='b')
-        client.wait(promise)
 
 
-        consume_promise = client.basic_consume_multi([self.name1, self.name2],
+        consume_promise = channel.basic_consume_multi([self.name1, self.name2],
                                                     prefetch_count=1)
-        result = client.wait(consume_promise, timeout=0.1)
+        result = channel.wait(consume_promise, timeout=0.1)
         r1 = result['body']
         self.assertTrue(r1 in ['a', 'b'])
 
-        result = client.wait(consume_promise, timeout=0.1)
+        result = channel.wait(consume_promise, timeout=0.1)
         self.assertEqual(result, None)
 
-        promise = client.basic_qos(consume_promise, prefetch_count=2)
-        result = client.wait(promise)
+        promise = channel.basic_qos(consume_promise, prefetch_count=2)
 
-        result = client.wait(consume_promise, timeout=0.1)
+        result = channel.wait(consume_promise, timeout=0.1)
         r2 = result['body']
         self.assertEqual(sorted([r1, r2]), ['a', 'b'])
 
 
-        promise = client.basic_cancel(consume_promise)
-        client.wait(promise)
+        promise = channel.basic_cancel(consume_promise)
+        channel.wait(promise)
 
-        promise = client.queue_delete(queue=self.name1)
-        client.wait(promise)
+        promise = channel.queue_delete(queue=self.name1)
+        channel.wait(promise)
 
-        promise = client.queue_delete(queue=self.name2)
-        client.wait(promise)
+        promise = channel.queue_delete(queue=self.name2)
+        channel.wait(promise)
 
 
     @base.connect

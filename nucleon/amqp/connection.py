@@ -31,13 +31,13 @@ class Connection(object):
     channel_max = 65535  # adjusted by Tune method
     MAX_SEND_QUEUE = 32  # frames
 
-    def __init__(self, amqp_url='amqp:///', pubacks=None):
-        self.pubacks = pubacks
+    def __init__(self, amqp_url='amqp:///', debug=True):
         self.channel_id = 0
         self.channels = {}
         self.channels_lock = RLock()
         self.queue = None
         self.state = STATE_DISCONNECTED
+        self.debug = debug
 
         (self.username, self.password, self.vhost, self.host, self.port) = \
             parse_amqp_url(str(amqp_url))
@@ -101,8 +101,6 @@ class Connection(object):
         except:
             self.state = STATE_DISCONNECTED
             raise
-        else:
-            self.state = STATE_CONNECTED
 
         # Set up connection greenlets
         self.queue = Queue(self.MAX_SEND_QUEUE)
@@ -121,8 +119,9 @@ class Connection(object):
         self.state = STATE_CONNECTED
         self.connected_event.set("Connected!")
 
-    def _on_disconnect(self, exc):
+    def _on_abnormal_disconnect(self, exc):
         """Called when the connection has been abnormally disconnected."""
+        self.state = STATE_DISCONNECTED
         self.on_error(exc)
         while True:
             try:
@@ -131,6 +130,12 @@ class Connection(object):
                 gevent.sleep(6)
             else:
                 break
+
+    def _on_normal_disconnect(self):
+        """Called when the connection has been abnormally disconnected."""
+        self.state = STATE_DISCONNECTED
+        self.on_error(ConnectionError("Connection closed."))
+        self.queue.put(None)
 
     def do_read(self):
         """Run a reader greenlet.
@@ -146,7 +151,7 @@ class Connection(object):
 #            if preamble != spec.PREAMBLE:
 #                raise ConnectionError("Incorrect protocol header from AMQP server")
 
-            while self.state in [STATE_CONNECTED, STATE_DISCONNECTING]:
+            while self.state != STATE_DISCONNECTED:
                 frame_header = reader.read(FRAME_HEADER.size)
                 frame_type, channel, size = FRAME_HEADER.unpack(frame_header)
 
@@ -171,8 +176,7 @@ class Connection(object):
         except Exception as e:
             self.connected_event.set(e)
 
-            if self.state == STATE_CONNECTED:
-                self.state = STATE_DISCONNECTED
+            if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
                 self._on_disconnect(e)
             else:
                 self.state = STATE_DISCONNECTED
@@ -187,7 +191,8 @@ class Connection(object):
                 self.channels[channel] = c
             else:
                 return
-        print 's->c', frame.name
+        if self.debug:
+            print 's->c', frame.name
         c._on_method(frame)
 
     def inbound_props(self, channel, body_size, props):
@@ -217,11 +222,30 @@ class Connection(object):
         self.sock.sendall(spec.PREAMBLE)
 
         # Enter a send loop
-        while True:
+        while self.state != STATE_DISCONNECTED:
             msg = self.queue.get()
             if msg is None:
                 break
+            if self.debug:
+                self._debug_print(msg)
             self.sock.sendall(msg)
+
+    def _debug_print(self, msg):
+        try:
+            # Print method, for debugging
+            type, channel, size = FRAME_HEADER.unpack_from(msg)
+            if type == 1:
+                method_id = struct.unpack_from('!I', msg, FRAME_HEADER.size)[0]
+                print 's<-c', spec.METHODS[method_id].name
+            else:
+                print {
+                    2: 's<-c [headers %d bytes]' % size,
+                    3: 's<-c [payload %d bytes]' % size,
+                    4: 's<-c [heartbeat %d bytes]' % size
+                }[type]
+        except Exception:
+            import traceback
+            traceback.print_exc()
 
     def _send_frames(self, channel, frames):
         """Send a sequence of frames on channel.
@@ -259,8 +283,7 @@ class Connection(object):
         if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
             self.state = STATE_DISCONNECTING
             self.channels[0].connection_close()
-            self.queue.put(None)
-            self.writer.join()
+            self.writer.join(timeout=2)
 
     def __del__(self):
         self.close()

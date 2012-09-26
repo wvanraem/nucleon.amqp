@@ -41,6 +41,7 @@ def method_doc(cls, method):
             txt = re.sub(r'\s+', ' ', txt).strip()
             txt = re.sub(r'^(.*?\.)\s+', r'\1\n\n', txt)
             txt += '\n\n'
+
         for field in e.findall('./field[doc]'):
             name = pyize(field.get('name'))
             doc = field.find('./doc').text.strip()
@@ -158,7 +159,7 @@ def print_frame_class(m):
     print "class %s(Frame):" % (m.frame,)
     print "    __slots__ = %r" % (tuple(f.n for f in m.arguments),)
     print "    name = '%s'" % (m.klass.name + '.' + m.name)
-    print "    method_id = 0x%08X  # %i,%i %i" % (
+    print "    METHOD_ID = 0x%08X  # %i,%i %i" % (
         m.method_id,
         m.klass.index, m.index, m.method_id
         )
@@ -199,7 +200,7 @@ def print_encode_method(m):
 #        print "            props['headers'] = headers"
 
     fields = codegen_helpers.PackWrapper()
-    fields.add('self.method_id', 'long')
+    fields.add('self.METHOD_ID', 'long')
     for f in m.arguments:
         if not f.banned and f.t == 'table':
             fields.add('%s' % f.n, f.t)
@@ -346,7 +347,9 @@ class FrameWriter(object):
 
         docstring = method_doc(m.klass.name, m.name)
         if docstring:
-            print '        """%s\n        """' % word_wrap(docstring).strip()
+            if not responses:
+                docstring = ".. warning:: This is an asynchronous method.\n\n" + docstring
+            print '        """%s\n        """' % docstring
 
         if m.hasContent:
             print "        self._send_message(%s(%s), headers, body)" % (

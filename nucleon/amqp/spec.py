@@ -12,8 +12,8 @@ METHODS = {}
 class FrameMeta(type):
     def __new__(cls, main, bases, dict):
         t = type.__new__(cls, main, bases, dict)
-        if 'method_id' in dict:
-            METHODS[dict['method_id']] = t
+        if 'METHOD_ID' in dict:
+            METHODS[dict['METHOD_ID']] = t
         return t
 
 
@@ -35,7 +35,7 @@ CLASS_BASIC             = 0x003C
 class FrameConnectionStart(Frame):
     __slots__ = ('version_major', 'version_minor', 'server_properties', 'mechanisms', 'locales')
     name = 'connection.start'
-    method_id = 0x000A000A  # 10,10 655370
+    METHOD_ID = 0x000A000A  # 10,10 655370
     has_content = False
 
     @staticmethod
@@ -50,7 +50,7 @@ class FrameConnectionStart(Frame):
         server_properties_raw = table.encode(self.server_properties)
         yield (0x01,
             ''.join([
-                struct.pack('!IBB', self.method_id, self.version_major, self.version_minor),
+                struct.pack('!IBB', self.METHOD_ID, self.version_major, self.version_minor),
                 server_properties_raw,
                 struct.pack('!I', len(self.mechanisms)),
                 self.mechanisms,
@@ -63,7 +63,7 @@ class FrameConnectionStart(Frame):
 class FrameConnectionStartOk(Frame):
     __slots__ = ('client_properties', 'mechanism', 'response', 'locale')
     name = 'connection.start-ok'
-    method_id = 0x000A000B  # 10,11 655371
+    METHOD_ID = 0x000A000B  # 10,11 655371
     has_content = False
 
     @staticmethod
@@ -78,7 +78,7 @@ class FrameConnectionStartOk(Frame):
         client_properties_raw = table.encode(self.client_properties)
         yield (0x01,
             ''.join([
-                struct.pack('!I', self.method_id),
+                struct.pack('!I', self.METHOD_ID),
                 client_properties_raw,
                 struct.pack('!B', len(self.mechanism)),
                 self.mechanism,
@@ -93,7 +93,7 @@ class FrameConnectionStartOk(Frame):
 class FrameConnectionSecure(Frame):
     __slots__ = ('challenge',)
     name = 'connection.secure'
-    method_id = 0x000A0014  # 10,20 655380
+    METHOD_ID = 0x000A0014  # 10,20 655380
     has_content = False
 
     @staticmethod
@@ -104,7 +104,7 @@ class FrameConnectionSecure(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!II', self.method_id, len(self.challenge)),
+                struct.pack('!II', self.METHOD_ID, len(self.challenge)),
                 self.challenge,
             ])
         )
@@ -113,7 +113,7 @@ class FrameConnectionSecure(Frame):
 class FrameConnectionSecureOk(Frame):
     __slots__ = ('response',)
     name = 'connection.secure-ok'
-    method_id = 0x000A0015  # 10,21 655381
+    METHOD_ID = 0x000A0015  # 10,21 655381
     has_content = False
 
     @staticmethod
@@ -124,7 +124,7 @@ class FrameConnectionSecureOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!II', self.method_id, len(self.response)),
+                struct.pack('!II', self.METHOD_ID, len(self.response)),
                 self.response,
             ])
         )
@@ -133,7 +133,7 @@ class FrameConnectionSecureOk(Frame):
 class FrameConnectionTune(Frame):
     __slots__ = ('channel_max', 'frame_max', 'heartbeat')
     name = 'connection.tune'
-    method_id = 0x000A001E  # 10,30 655390
+    METHOD_ID = 0x000A001E  # 10,30 655390
     has_content = False
 
     @staticmethod
@@ -143,14 +143,14 @@ class FrameConnectionTune(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IHIH', self.method_id, self.channel_max, self.frame_max, self.heartbeat),
+            struct.pack('!IHIH', self.METHOD_ID, self.channel_max, self.frame_max, self.heartbeat),
         )
 
 
 class FrameConnectionTuneOk(Frame):
     __slots__ = ('channel_max', 'frame_max', 'heartbeat')
     name = 'connection.tune-ok'
-    method_id = 0x000A001F  # 10,31 655391
+    METHOD_ID = 0x000A001F  # 10,31 655391
     has_content = False
 
     @staticmethod
@@ -160,14 +160,14 @@ class FrameConnectionTuneOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IHIH', self.method_id, self.channel_max, self.frame_max, self.heartbeat),
+            struct.pack('!IHIH', self.METHOD_ID, self.channel_max, self.frame_max, self.heartbeat),
         )
 
 
 class FrameConnectionOpen(Frame):
     __slots__ = ('virtual_host', 'capabilities', 'insist')
     name = 'connection.open'
-    method_id = 0x000A0028  # 10,40 655400
+    METHOD_ID = 0x000A0028  # 10,40 655400
     has_content = False
 
     @staticmethod
@@ -181,7 +181,7 @@ class FrameConnectionOpen(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.virtual_host)),
+                struct.pack('!IB', self.METHOD_ID, len(self.virtual_host)),
                 self.virtual_host,
                 struct.pack('!B', len(self.capabilities)),
                 self.capabilities,
@@ -193,7 +193,7 @@ class FrameConnectionOpen(Frame):
 class FrameConnectionOpenOk(Frame):
     __slots__ = ('known_hosts',)
     name = 'connection.open-ok'
-    method_id = 0x000A0029  # 10,41 655401
+    METHOD_ID = 0x000A0029  # 10,41 655401
     has_content = False
 
     @staticmethod
@@ -204,7 +204,7 @@ class FrameConnectionOpenOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.known_hosts)),
+                struct.pack('!IB', self.METHOD_ID, len(self.known_hosts)),
                 self.known_hosts,
             ])
         )
@@ -213,7 +213,7 @@ class FrameConnectionOpenOk(Frame):
 class FrameConnectionClose(Frame):
     __slots__ = ('reply_code', 'reply_text', 'class_id', 'method_id')
     name = 'connection.close'
-    method_id = 0x000A0032  # 10,50 655410
+    METHOD_ID = 0x000A0032  # 10,50 655410
     has_content = False
 
     @staticmethod
@@ -226,7 +226,7 @@ class FrameConnectionClose(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.reply_code, len(self.reply_text)),
+                struct.pack('!IHB', self.METHOD_ID, self.reply_code, len(self.reply_text)),
                 self.reply_text,
                 struct.pack('!HH', self.class_id, self.method_id),
             ])
@@ -236,7 +236,7 @@ class FrameConnectionClose(Frame):
 class FrameConnectionCloseOk(Frame):
     __slots__ = ()
     name = 'connection.close-ok'
-    method_id = 0x000A0033  # 10,51 655411
+    METHOD_ID = 0x000A0033  # 10,51 655411
     has_content = False
 
     @staticmethod
@@ -245,14 +245,14 @@ class FrameConnectionCloseOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameChannelOpen(Frame):
     __slots__ = ('out_of_band',)
     name = 'channel.open'
-    method_id = 0x0014000A  # 20,10 1310730
+    METHOD_ID = 0x0014000A  # 20,10 1310730
     has_content = False
 
     @staticmethod
@@ -263,7 +263,7 @@ class FrameChannelOpen(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.out_of_band)),
+                struct.pack('!IB', self.METHOD_ID, len(self.out_of_band)),
                 self.out_of_band,
             ])
         )
@@ -272,7 +272,7 @@ class FrameChannelOpen(Frame):
 class FrameChannelOpenOk(Frame):
     __slots__ = ('channel_id',)
     name = 'channel.open-ok'
-    method_id = 0x0014000B  # 20,11 1310731
+    METHOD_ID = 0x0014000B  # 20,11 1310731
     has_content = False
 
     @staticmethod
@@ -283,7 +283,7 @@ class FrameChannelOpenOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!II', self.method_id, len(self.channel_id)),
+                struct.pack('!II', self.METHOD_ID, len(self.channel_id)),
                 self.channel_id,
             ])
         )
@@ -292,7 +292,7 @@ class FrameChannelOpenOk(Frame):
 class FrameChannelFlow(Frame):
     __slots__ = ('active',)
     name = 'channel.flow'
-    method_id = 0x00140014  # 20,20 1310740
+    METHOD_ID = 0x00140014  # 20,20 1310740
     has_content = False
 
     @staticmethod
@@ -303,14 +303,14 @@ class FrameChannelFlow(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IB', self.method_id, (self.active and 0x1 or 0)),
+            struct.pack('!IB', self.METHOD_ID, (self.active and 0x1 or 0)),
         )
 
 
 class FrameChannelFlowOk(Frame):
     __slots__ = ('active',)
     name = 'channel.flow-ok'
-    method_id = 0x00140015  # 20,21 1310741
+    METHOD_ID = 0x00140015  # 20,21 1310741
     has_content = False
 
     @staticmethod
@@ -321,14 +321,14 @@ class FrameChannelFlowOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IB', self.method_id, (self.active and 0x1 or 0)),
+            struct.pack('!IB', self.METHOD_ID, (self.active and 0x1 or 0)),
         )
 
 
 class FrameChannelClose(Frame):
     __slots__ = ('reply_code', 'reply_text', 'class_id', 'method_id')
     name = 'channel.close'
-    method_id = 0x00140028  # 20,40 1310760
+    METHOD_ID = 0x00140028  # 20,40 1310760
     has_content = False
 
     @staticmethod
@@ -341,7 +341,7 @@ class FrameChannelClose(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.reply_code, len(self.reply_text)),
+                struct.pack('!IHB', self.METHOD_ID, self.reply_code, len(self.reply_text)),
                 self.reply_text,
                 struct.pack('!HH', self.class_id, self.method_id),
             ])
@@ -351,7 +351,7 @@ class FrameChannelClose(Frame):
 class FrameChannelCloseOk(Frame):
     __slots__ = ()
     name = 'channel.close-ok'
-    method_id = 0x00140029  # 20,41 1310761
+    METHOD_ID = 0x00140029  # 20,41 1310761
     has_content = False
 
     @staticmethod
@@ -360,14 +360,14 @@ class FrameChannelCloseOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameAccessRequest(Frame):
     __slots__ = ('realm', 'exclusive', 'passive', 'active', 'write', 'read')
     name = 'access.request'
-    method_id = 0x001E000A  # 30,10 1966090
+    METHOD_ID = 0x001E000A  # 30,10 1966090
     has_content = False
 
     @staticmethod
@@ -384,7 +384,7 @@ class FrameAccessRequest(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.realm)),
+                struct.pack('!IB', self.METHOD_ID, len(self.realm)),
                 self.realm,
                 struct.pack('!B', (self.exclusive and 0x1 or 0) | (self.passive and 0x2 or 0) | (self.active and 0x4 or 0) | (self.write and 0x8 or 0) | (self.read and 0x10 or 0)),
             ])
@@ -394,7 +394,7 @@ class FrameAccessRequest(Frame):
 class FrameAccessRequestOk(Frame):
     __slots__ = ('ticket',)
     name = 'access.request-ok'
-    method_id = 0x001E000B  # 30,11 1966091
+    METHOD_ID = 0x001E000B  # 30,11 1966091
     has_content = False
 
     @staticmethod
@@ -404,14 +404,14 @@ class FrameAccessRequestOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IH', self.method_id, self.ticket),
+            struct.pack('!IH', self.METHOD_ID, self.ticket),
         )
 
 
 class FrameExchangeDeclare(Frame):
     __slots__ = ('ticket', 'exchange', 'type', 'passive', 'durable', 'auto_delete', 'internal', 'nowait', 'arguments')
     name = 'exchange.declare'
-    method_id = 0x0028000A  # 40,10 2621450
+    METHOD_ID = 0x0028000A  # 40,10 2621450
     has_content = False
 
     @staticmethod
@@ -432,7 +432,7 @@ class FrameExchangeDeclare(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.exchange)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.exchange)),
                 self.exchange,
                 struct.pack('!B', len(self.type)),
                 self.type,
@@ -445,7 +445,7 @@ class FrameExchangeDeclare(Frame):
 class FrameExchangeDeclareOk(Frame):
     __slots__ = ()
     name = 'exchange.declare-ok'
-    method_id = 0x0028000B  # 40,11 2621451
+    METHOD_ID = 0x0028000B  # 40,11 2621451
     has_content = False
 
     @staticmethod
@@ -454,14 +454,14 @@ class FrameExchangeDeclareOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameExchangeDelete(Frame):
     __slots__ = ('ticket', 'exchange', 'if_unused', 'nowait')
     name = 'exchange.delete'
-    method_id = 0x00280014  # 40,20 2621460
+    METHOD_ID = 0x00280014  # 40,20 2621460
     has_content = False
 
     @staticmethod
@@ -476,7 +476,7 @@ class FrameExchangeDelete(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.exchange)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.exchange)),
                 self.exchange,
                 struct.pack('!B', (self.if_unused and 0x1 or 0) | (self.nowait and 0x2 or 0)),
             ])
@@ -486,7 +486,7 @@ class FrameExchangeDelete(Frame):
 class FrameExchangeDeleteOk(Frame):
     __slots__ = ()
     name = 'exchange.delete-ok'
-    method_id = 0x00280015  # 40,21 2621461
+    METHOD_ID = 0x00280015  # 40,21 2621461
     has_content = False
 
     @staticmethod
@@ -495,14 +495,14 @@ class FrameExchangeDeleteOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameExchangeBind(Frame):
     __slots__ = ('ticket', 'destination', 'source', 'routing_key', 'nowait', 'arguments')
     name = 'exchange.bind'
-    method_id = 0x0028001E  # 40,30 2621470
+    METHOD_ID = 0x0028001E  # 40,30 2621470
     has_content = False
 
     @staticmethod
@@ -520,7 +520,7 @@ class FrameExchangeBind(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.destination)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.destination)),
                 self.destination,
                 struct.pack('!B', len(self.source)),
                 self.source,
@@ -535,7 +535,7 @@ class FrameExchangeBind(Frame):
 class FrameExchangeBindOk(Frame):
     __slots__ = ()
     name = 'exchange.bind-ok'
-    method_id = 0x0028001F  # 40,31 2621471
+    METHOD_ID = 0x0028001F  # 40,31 2621471
     has_content = False
 
     @staticmethod
@@ -544,14 +544,14 @@ class FrameExchangeBindOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameExchangeUnbind(Frame):
     __slots__ = ('ticket', 'destination', 'source', 'routing_key', 'nowait', 'arguments')
     name = 'exchange.unbind'
-    method_id = 0x00280028  # 40,40 2621480
+    METHOD_ID = 0x00280028  # 40,40 2621480
     has_content = False
 
     @staticmethod
@@ -569,7 +569,7 @@ class FrameExchangeUnbind(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.destination)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.destination)),
                 self.destination,
                 struct.pack('!B', len(self.source)),
                 self.source,
@@ -584,7 +584,7 @@ class FrameExchangeUnbind(Frame):
 class FrameExchangeUnbindOk(Frame):
     __slots__ = ()
     name = 'exchange.unbind-ok'
-    method_id = 0x00280033  # 40,51 2621491
+    METHOD_ID = 0x00280033  # 40,51 2621491
     has_content = False
 
     @staticmethod
@@ -593,14 +593,14 @@ class FrameExchangeUnbindOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameQueueDeclare(Frame):
     __slots__ = ('ticket', 'queue', 'passive', 'durable', 'exclusive', 'auto_delete', 'nowait', 'arguments')
     name = 'queue.declare'
-    method_id = 0x0032000A  # 50,10 3276810
+    METHOD_ID = 0x0032000A  # 50,10 3276810
     has_content = False
 
     @staticmethod
@@ -620,7 +620,7 @@ class FrameQueueDeclare(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', (self.passive and 0x1 or 0) | (self.durable and 0x2 or 0) | (self.exclusive and 0x4 or 0) | (self.auto_delete and 0x8 or 0) | (self.nowait and 0x10 or 0)),
                 arguments_raw,
@@ -631,7 +631,7 @@ class FrameQueueDeclare(Frame):
 class FrameQueueDeclareOk(Frame):
     __slots__ = ('queue', 'message_count', 'consumer_count')
     name = 'queue.declare-ok'
-    method_id = 0x0032000B  # 50,11 3276811
+    METHOD_ID = 0x0032000B  # 50,11 3276811
     has_content = False
 
     @staticmethod
@@ -643,7 +643,7 @@ class FrameQueueDeclareOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.queue)),
+                struct.pack('!IB', self.METHOD_ID, len(self.queue)),
                 self.queue,
                 struct.pack('!II', self.message_count, self.consumer_count),
             ])
@@ -653,7 +653,7 @@ class FrameQueueDeclareOk(Frame):
 class FrameQueueBind(Frame):
     __slots__ = ('ticket', 'queue', 'exchange', 'routing_key', 'nowait', 'arguments')
     name = 'queue.bind'
-    method_id = 0x00320014  # 50,20 3276820
+    METHOD_ID = 0x00320014  # 50,20 3276820
     has_content = False
 
     @staticmethod
@@ -671,7 +671,7 @@ class FrameQueueBind(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', len(self.exchange)),
                 self.exchange,
@@ -686,7 +686,7 @@ class FrameQueueBind(Frame):
 class FrameQueueBindOk(Frame):
     __slots__ = ()
     name = 'queue.bind-ok'
-    method_id = 0x00320015  # 50,21 3276821
+    METHOD_ID = 0x00320015  # 50,21 3276821
     has_content = False
 
     @staticmethod
@@ -695,14 +695,14 @@ class FrameQueueBindOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameQueuePurge(Frame):
     __slots__ = ('ticket', 'queue', 'nowait')
     name = 'queue.purge'
-    method_id = 0x0032001E  # 50,30 3276830
+    METHOD_ID = 0x0032001E  # 50,30 3276830
     has_content = False
 
     @staticmethod
@@ -716,7 +716,7 @@ class FrameQueuePurge(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', (self.nowait and 0x1 or 0)),
             ])
@@ -726,7 +726,7 @@ class FrameQueuePurge(Frame):
 class FrameQueuePurgeOk(Frame):
     __slots__ = ('message_count',)
     name = 'queue.purge-ok'
-    method_id = 0x0032001F  # 50,31 3276831
+    METHOD_ID = 0x0032001F  # 50,31 3276831
     has_content = False
 
     @staticmethod
@@ -736,14 +736,14 @@ class FrameQueuePurgeOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!II', self.method_id, self.message_count),
+            struct.pack('!II', self.METHOD_ID, self.message_count),
         )
 
 
 class FrameQueueDelete(Frame):
     __slots__ = ('ticket', 'queue', 'if_unused', 'if_empty', 'nowait')
     name = 'queue.delete'
-    method_id = 0x00320028  # 50,40 3276840
+    METHOD_ID = 0x00320028  # 50,40 3276840
     has_content = False
 
     @staticmethod
@@ -759,7 +759,7 @@ class FrameQueueDelete(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', (self.if_unused and 0x1 or 0) | (self.if_empty and 0x2 or 0) | (self.nowait and 0x4 or 0)),
             ])
@@ -769,7 +769,7 @@ class FrameQueueDelete(Frame):
 class FrameQueueDeleteOk(Frame):
     __slots__ = ('message_count',)
     name = 'queue.delete-ok'
-    method_id = 0x00320029  # 50,41 3276841
+    METHOD_ID = 0x00320029  # 50,41 3276841
     has_content = False
 
     @staticmethod
@@ -779,14 +779,14 @@ class FrameQueueDeleteOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!II', self.method_id, self.message_count),
+            struct.pack('!II', self.METHOD_ID, self.message_count),
         )
 
 
 class FrameQueueUnbind(Frame):
     __slots__ = ('ticket', 'queue', 'exchange', 'routing_key', 'arguments')
     name = 'queue.unbind'
-    method_id = 0x00320032  # 50,50 3276850
+    METHOD_ID = 0x00320032  # 50,50 3276850
     has_content = False
 
     @staticmethod
@@ -802,7 +802,7 @@ class FrameQueueUnbind(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', len(self.exchange)),
                 self.exchange,
@@ -816,7 +816,7 @@ class FrameQueueUnbind(Frame):
 class FrameQueueUnbindOk(Frame):
     __slots__ = ()
     name = 'queue.unbind-ok'
-    method_id = 0x00320033  # 50,51 3276851
+    METHOD_ID = 0x00320033  # 50,51 3276851
     has_content = False
 
     @staticmethod
@@ -825,14 +825,14 @@ class FrameQueueUnbindOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameBasicQos(Frame):
     __slots__ = ('prefetch_size', 'prefetch_count', 'global_')
     name = 'basic.qos'
-    method_id = 0x003C000A  # 60,10 3932170
+    METHOD_ID = 0x003C000A  # 60,10 3932170
     has_content = False
 
     @staticmethod
@@ -843,14 +843,14 @@ class FrameBasicQos(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IIHB', self.method_id, self.prefetch_size, self.prefetch_count, (self.global_ and 0x1 or 0)),
+            struct.pack('!IIHB', self.METHOD_ID, self.prefetch_size, self.prefetch_count, (self.global_ and 0x1 or 0)),
         )
 
 
 class FrameBasicQosOk(Frame):
     __slots__ = ()
     name = 'basic.qos-ok'
-    method_id = 0x003C000B  # 60,11 3932171
+    METHOD_ID = 0x003C000B  # 60,11 3932171
     has_content = False
 
     @staticmethod
@@ -859,14 +859,14 @@ class FrameBasicQosOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameBasicConsume(Frame):
     __slots__ = ('ticket', 'queue', 'consumer_tag', 'no_local', 'no_ack', 'exclusive', 'nowait', 'arguments')
     name = 'basic.consume'
-    method_id = 0x003C0014  # 60,20 3932180
+    METHOD_ID = 0x003C0014  # 60,20 3932180
     has_content = False
 
     @staticmethod
@@ -886,7 +886,7 @@ class FrameBasicConsume(Frame):
         arguments_raw = table.encode(self.arguments)
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', len(self.consumer_tag)),
                 self.consumer_tag,
@@ -899,7 +899,7 @@ class FrameBasicConsume(Frame):
 class FrameBasicConsumeOk(Frame):
     __slots__ = ('consumer_tag',)
     name = 'basic.consume-ok'
-    method_id = 0x003C0015  # 60,21 3932181
+    METHOD_ID = 0x003C0015  # 60,21 3932181
     has_content = False
 
     @staticmethod
@@ -910,7 +910,7 @@ class FrameBasicConsumeOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.consumer_tag)),
+                struct.pack('!IB', self.METHOD_ID, len(self.consumer_tag)),
                 self.consumer_tag,
             ])
         )
@@ -919,7 +919,7 @@ class FrameBasicConsumeOk(Frame):
 class FrameBasicCancel(Frame):
     __slots__ = ('consumer_tag', 'nowait')
     name = 'basic.cancel'
-    method_id = 0x003C001E  # 60,30 3932190
+    METHOD_ID = 0x003C001E  # 60,30 3932190
     has_content = False
 
     @staticmethod
@@ -932,7 +932,7 @@ class FrameBasicCancel(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.consumer_tag)),
+                struct.pack('!IB', self.METHOD_ID, len(self.consumer_tag)),
                 self.consumer_tag,
                 struct.pack('!B', (self.nowait and 0x1 or 0)),
             ])
@@ -942,7 +942,7 @@ class FrameBasicCancel(Frame):
 class FrameBasicCancelOk(Frame):
     __slots__ = ('consumer_tag',)
     name = 'basic.cancel-ok'
-    method_id = 0x003C001F  # 60,31 3932191
+    METHOD_ID = 0x003C001F  # 60,31 3932191
     has_content = False
 
     @staticmethod
@@ -953,7 +953,7 @@ class FrameBasicCancelOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.consumer_tag)),
+                struct.pack('!IB', self.METHOD_ID, len(self.consumer_tag)),
                 self.consumer_tag,
             ])
         )
@@ -962,7 +962,7 @@ class FrameBasicCancelOk(Frame):
 class FrameBasicPublish(Frame):
     __slots__ = ('ticket', 'exchange', 'routing_key', 'mandatory', 'immediate')
     name = 'basic.publish'
-    method_id = 0x003C0028  # 60,40 3932200
+    METHOD_ID = 0x003C0028  # 60,40 3932200
     has_content = True
     class_id = CLASS_BASIC
 
@@ -979,7 +979,7 @@ class FrameBasicPublish(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.exchange)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.exchange)),
                 self.exchange,
                 struct.pack('!B', len(self.routing_key)),
                 self.routing_key,
@@ -991,7 +991,7 @@ class FrameBasicPublish(Frame):
 class FrameBasicReturn(Frame):
     __slots__ = ('reply_code', 'reply_text', 'exchange', 'routing_key')
     name = 'basic.return'
-    method_id = 0x003C0032  # 60,50 3932210
+    METHOD_ID = 0x003C0032  # 60,50 3932210
     has_content = True
     class_id = CLASS_BASIC
 
@@ -1006,7 +1006,7 @@ class FrameBasicReturn(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.reply_code, len(self.reply_text)),
+                struct.pack('!IHB', self.METHOD_ID, self.reply_code, len(self.reply_text)),
                 self.reply_text,
                 struct.pack('!B', len(self.exchange)),
                 self.exchange,
@@ -1019,7 +1019,7 @@ class FrameBasicReturn(Frame):
 class FrameBasicDeliver(Frame):
     __slots__ = ('consumer_tag', 'delivery_tag', 'redelivered', 'exchange', 'routing_key')
     name = 'basic.deliver'
-    method_id = 0x003C003C  # 60,60 3932220
+    METHOD_ID = 0x003C003C  # 60,60 3932220
     has_content = True
     class_id = CLASS_BASIC
 
@@ -1035,7 +1035,7 @@ class FrameBasicDeliver(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.consumer_tag)),
+                struct.pack('!IB', self.METHOD_ID, len(self.consumer_tag)),
                 self.consumer_tag,
                 struct.pack('!QBB', self.delivery_tag, (self.redelivered and 0x1 or 0), len(self.exchange)),
                 self.exchange,
@@ -1048,7 +1048,7 @@ class FrameBasicDeliver(Frame):
 class FrameBasicGet(Frame):
     __slots__ = ('ticket', 'queue', 'no_ack')
     name = 'basic.get'
-    method_id = 0x003C0046  # 60,70 3932230
+    METHOD_ID = 0x003C0046  # 60,70 3932230
     has_content = False
 
     @staticmethod
@@ -1062,7 +1062,7 @@ class FrameBasicGet(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IHB', self.method_id, self.ticket, len(self.queue)),
+                struct.pack('!IHB', self.METHOD_ID, self.ticket, len(self.queue)),
                 self.queue,
                 struct.pack('!B', (self.no_ack and 0x1 or 0)),
             ])
@@ -1072,7 +1072,7 @@ class FrameBasicGet(Frame):
 class FrameBasicGetOk(Frame):
     __slots__ = ('delivery_tag', 'redelivered', 'exchange', 'routing_key', 'message_count')
     name = 'basic.get-ok'
-    method_id = 0x003C0047  # 60,71 3932231
+    METHOD_ID = 0x003C0047  # 60,71 3932231
     has_content = True
     class_id = CLASS_BASIC
 
@@ -1088,7 +1088,7 @@ class FrameBasicGetOk(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IQBB', self.method_id, self.delivery_tag, (self.redelivered and 0x1 or 0), len(self.exchange)),
+                struct.pack('!IQBB', self.METHOD_ID, self.delivery_tag, (self.redelivered and 0x1 or 0), len(self.exchange)),
                 self.exchange,
                 struct.pack('!B', len(self.routing_key)),
                 self.routing_key,
@@ -1100,7 +1100,7 @@ class FrameBasicGetOk(Frame):
 class FrameBasicGetEmpty(Frame):
     __slots__ = ('cluster_id',)
     name = 'basic.get-empty'
-    method_id = 0x003C0048  # 60,72 3932232
+    METHOD_ID = 0x003C0048  # 60,72 3932232
     has_content = False
 
     @staticmethod
@@ -1111,7 +1111,7 @@ class FrameBasicGetEmpty(Frame):
     def encode(self):
         yield (0x01,
             ''.join([
-                struct.pack('!IB', self.method_id, len(self.cluster_id)),
+                struct.pack('!IB', self.METHOD_ID, len(self.cluster_id)),
                 self.cluster_id,
             ])
         )
@@ -1120,7 +1120,7 @@ class FrameBasicGetEmpty(Frame):
 class FrameBasicAck(Frame):
     __slots__ = ('delivery_tag', 'multiple')
     name = 'basic.ack'
-    method_id = 0x003C0050  # 60,80 3932240
+    METHOD_ID = 0x003C0050  # 60,80 3932240
     has_content = False
 
     @staticmethod
@@ -1131,14 +1131,14 @@ class FrameBasicAck(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IQB', self.method_id, self.delivery_tag, (self.multiple and 0x1 or 0)),
+            struct.pack('!IQB', self.METHOD_ID, self.delivery_tag, (self.multiple and 0x1 or 0)),
         )
 
 
 class FrameBasicReject(Frame):
     __slots__ = ('delivery_tag', 'requeue')
     name = 'basic.reject'
-    method_id = 0x003C005A  # 60,90 3932250
+    METHOD_ID = 0x003C005A  # 60,90 3932250
     has_content = False
 
     @staticmethod
@@ -1149,14 +1149,14 @@ class FrameBasicReject(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IQB', self.method_id, self.delivery_tag, (self.requeue and 0x1 or 0)),
+            struct.pack('!IQB', self.METHOD_ID, self.delivery_tag, (self.requeue and 0x1 or 0)),
         )
 
 
 class FrameBasicRecoverAsync(Frame):
     __slots__ = ('requeue',)
     name = 'basic.recover-async'
-    method_id = 0x003C0064  # 60,100 3932260
+    METHOD_ID = 0x003C0064  # 60,100 3932260
     has_content = False
 
     @staticmethod
@@ -1167,14 +1167,14 @@ class FrameBasicRecoverAsync(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IB', self.method_id, (self.requeue and 0x1 or 0)),
+            struct.pack('!IB', self.METHOD_ID, (self.requeue and 0x1 or 0)),
         )
 
 
 class FrameBasicRecover(Frame):
     __slots__ = ('requeue',)
     name = 'basic.recover'
-    method_id = 0x003C006E  # 60,110 3932270
+    METHOD_ID = 0x003C006E  # 60,110 3932270
     has_content = False
 
     @staticmethod
@@ -1185,14 +1185,14 @@ class FrameBasicRecover(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IB', self.method_id, (self.requeue and 0x1 or 0)),
+            struct.pack('!IB', self.METHOD_ID, (self.requeue and 0x1 or 0)),
         )
 
 
 class FrameBasicRecoverOk(Frame):
     __slots__ = ()
     name = 'basic.recover-ok'
-    method_id = 0x003C006F  # 60,111 3932271
+    METHOD_ID = 0x003C006F  # 60,111 3932271
     has_content = False
 
     @staticmethod
@@ -1201,14 +1201,14 @@ class FrameBasicRecoverOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameBasicNack(Frame):
     __slots__ = ('delivery_tag', 'multiple', 'requeue')
     name = 'basic.nack'
-    method_id = 0x003C0078  # 60,120 3932280
+    METHOD_ID = 0x003C0078  # 60,120 3932280
     has_content = False
 
     @staticmethod
@@ -1220,14 +1220,14 @@ class FrameBasicNack(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IQB', self.method_id, self.delivery_tag, (self.multiple and 0x1 or 0) | (self.requeue and 0x2 or 0)),
+            struct.pack('!IQB', self.METHOD_ID, self.delivery_tag, (self.multiple and 0x1 or 0) | (self.requeue and 0x2 or 0)),
         )
 
 
 class FrameTxSelect(Frame):
     __slots__ = ()
     name = 'tx.select'
-    method_id = 0x005A000A  # 90,10 5898250
+    METHOD_ID = 0x005A000A  # 90,10 5898250
     has_content = False
 
     @staticmethod
@@ -1236,14 +1236,14 @@ class FrameTxSelect(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameTxSelectOk(Frame):
     __slots__ = ()
     name = 'tx.select-ok'
-    method_id = 0x005A000B  # 90,11 5898251
+    METHOD_ID = 0x005A000B  # 90,11 5898251
     has_content = False
 
     @staticmethod
@@ -1252,14 +1252,14 @@ class FrameTxSelectOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameTxCommit(Frame):
     __slots__ = ()
     name = 'tx.commit'
-    method_id = 0x005A0014  # 90,20 5898260
+    METHOD_ID = 0x005A0014  # 90,20 5898260
     has_content = False
 
     @staticmethod
@@ -1268,14 +1268,14 @@ class FrameTxCommit(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameTxCommitOk(Frame):
     __slots__ = ()
     name = 'tx.commit-ok'
-    method_id = 0x005A0015  # 90,21 5898261
+    METHOD_ID = 0x005A0015  # 90,21 5898261
     has_content = False
 
     @staticmethod
@@ -1284,14 +1284,14 @@ class FrameTxCommitOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameTxRollback(Frame):
     __slots__ = ()
     name = 'tx.rollback'
-    method_id = 0x005A001E  # 90,30 5898270
+    METHOD_ID = 0x005A001E  # 90,30 5898270
     has_content = False
 
     @staticmethod
@@ -1300,14 +1300,14 @@ class FrameTxRollback(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameTxRollbackOk(Frame):
     __slots__ = ()
     name = 'tx.rollback-ok'
-    method_id = 0x005A001F  # 90,31 5898271
+    METHOD_ID = 0x005A001F  # 90,31 5898271
     has_content = False
 
     @staticmethod
@@ -1316,14 +1316,14 @@ class FrameTxRollbackOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
 class FrameConfirmSelect(Frame):
     __slots__ = ('nowait',)
     name = 'confirm.select'
-    method_id = 0x0055000A  # 85,10 5570570
+    METHOD_ID = 0x0055000A  # 85,10 5570570
     has_content = False
 
     @staticmethod
@@ -1334,14 +1334,14 @@ class FrameConfirmSelect(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!IB', self.method_id, (self.nowait and 0x1 or 0)),
+            struct.pack('!IB', self.METHOD_ID, (self.nowait and 0x1 or 0)),
         )
 
 
 class FrameConfirmSelectOk(Frame):
     __slots__ = ()
     name = 'confirm.select-ok'
-    method_id = 0x0055000B  # 85,11 5570571
+    METHOD_ID = 0x0055000B  # 85,11 5570571
     has_content = False
 
     @staticmethod
@@ -1350,7 +1350,7 @@ class FrameConfirmSelectOk(Frame):
 
     def encode(self):
         yield (0x01,
-            struct.pack('!I', self.method_id),
+            struct.pack('!I', self.METHOD_ID),
         )
 
 
@@ -1564,60 +1564,49 @@ class FrameWriter(object):
         return method(*args, **kwargs)
 
     def connection_start_ok(self, client_properties=None, mechanism='PLAIN', response=None, locale='en_US'):
-        """This method selects a SASL security mechanism.
+        """.. warning:: This is an asynchronous method.
 
-        :param mechanism: A single security mechanisms selected by the client,
-        which must be one of those specified by the server.
+This method selects a SASL security mechanism.
 
-        :param response: A block of opaque data passed to the security
-        mechanism. The contents of this data are defined by the SASL security mechanism.
+:param mechanism: A single security mechanisms selected by the client, which must be one of those specified by the server.
 
-        :param locale: A single message locale selected by the client, which
-        must be one of those specified by the server.
+:param response: A block of opaque data passed to the security mechanism. The contents of this data are defined by the SASL security mechanism.
+
+:param locale: A single message locale selected by the client, which must be one of those specified by the server.
         """
         self._send(FrameConnectionStartOk(client_properties, mechanism, response, locale))
 
     def connection_secure_ok(self, response=None):
-        """This method attempts to authenticate, passing a block of SASL data for
-        the security mechanism at the server side.
+        """.. warning:: This is an asynchronous method.
 
-        :param response: A block of opaque data passed to the security
-        mechanism. The contents of this data are defined by the SASL security
-        mechanism.
+This method attempts to authenticate, passing a block of SASL data for the security mechanism at the server side.
+
+:param response: A block of opaque data passed to the security mechanism. The contents of this data are defined by the SASL security mechanism.
         """
         self._send(FrameConnectionSecureOk(response))
 
     def connection_tune_ok(self, channel_max=0, frame_max=0, heartbeat=0):
-        """This method sends the client's connection tuning parameters to the server.
+        """.. warning:: This is an asynchronous method.
 
-        Certain fields are negotiated, others provide capability information.
+This method sends the client's connection tuning parameters to the server.
 
-        :param channel_max: The maximum total number of channels that the
-        client will use per connection.
+Certain fields are negotiated, others provide capability information.
 
-        :param frame_max: The largest frame size that the client and server
-        will use for the connection. Zero means that the client does not impose
-        any specific limit but may reject very large frames if it cannot
-        allocate resources for them. Note that the frame-max limit applies
-        principally to content frames, where large contents can be broken into
-        frames of arbitrary size.
+:param channel_max: The maximum total number of channels that the client will use per connection.
 
-        :param heartbeat: The delay, in seconds, of the connection heartbeat
-        that the client wants. Zero means the client does not want a heartbeat.
+:param frame_max: The largest frame size that the client and server will use for the connection. Zero means that the client does not impose any specific limit but may reject very large frames if it cannot allocate resources for them. Note that the frame-max limit applies principally to content frames, where large contents can be broken into frames of arbitrary size.
+
+:param heartbeat: The delay, in seconds, of the connection heartbeat that the client wants. Zero means the client does not want a heartbeat.
         """
         self._send(FrameConnectionTuneOk(channel_max, frame_max, heartbeat))
 
     @syncmethod('connection.open-ok')
     def connection_open(self, virtual_host='/'):
-        """This method opens a connection to a virtual host, which is a collection
-        of resources, and acts to separate multiple application domains within
-        a server.
+        """This method opens a connection to a virtual host, which is a collection of resources, and acts to separate multiple application domains within a server.
 
-        The server may apply arbitrary limits per virtual host, such as the
-        number of each type of entity that may be used, per connection and/or
-        in total.
+The server may apply arbitrary limits per virtual host, such as the number of each type of entity that may be used, per connection and/or in total.
 
-        :param virtual_host: The name of the virtual host to work with.
+:param virtual_host: The name of the virtual host to work with.
         """
         self._send(FrameConnectionOpen(virtual_host, '', 0))
 
@@ -1625,23 +1614,18 @@ class FrameWriter(object):
     def connection_close(self, reply_code=200, reply_text='', class_id=0, method_id=0):
         """This method indicates that the sender wants to close the connection.
 
-        This may be due to internal conditions (e.g. a forced shut-down) or due
-        to an error handling a specific method, i.e. an exception. When a close
-        is due to an exception, the sender provides the class and method id of
-        the method which caused the exception.
+This may be due to internal conditions (e.g. a forced shut-down) or due to an error handling a specific method, i.e. an exception. When a close is due to an exception, the sender provides the class and method id of the method which caused the exception.
 
-        :param class_id: When the close is provoked by a method exception, this
-        is the class of the method.
+:param class_id: When the close is provoked by a method exception, this is the class of the method.
 
-        :param method_id: When the close is provoked by a method exception,
-        this is the ID of the method.
+:param method_id: When the close is provoked by a method exception, this is the ID of the method.
         """
         self._send(FrameConnectionClose(reply_code, reply_text, class_id, method_id))
 
     def connection_close_ok(self, ):
-        """This method confirms a Connection.Close method and tells the recipient
-        that it is safe to release resources for the connection and close the
-        socket.
+        """.. warning:: This is an asynchronous method.
+
+This method confirms a Connection.Close method and tells the recipient that it is safe to release resources for the connection and close the socket.
         """
         self._send(FrameConnectionCloseOk())
 
@@ -1653,25 +1637,20 @@ class FrameWriter(object):
 
     @syncmethod('channel.flow-ok')
     def channel_flow(self, active=None):
-        """This method asks the peer to pause or restart the flow of content data
-        sent by a consumer.
+        """This method asks the peer to pause or restart the flow of content data sent by a consumer.
 
-        This is a simple flow-control mechanism that a peer can use to avoid
-        overflowing its queues or otherwise finding itself receiving more
-        messages than it can process. Note that this method is not intended for
-        window control. It does not affect contents returned by Basic.Get-Ok methods.
+This is a simple flow-control mechanism that a peer can use to avoid overflowing its queues or otherwise finding itself receiving more messages than it can process. Note that this method is not intended for window control. It does not affect contents returned by Basic.Get-Ok methods.
 
-        :param active: If 1, the peer starts sending content frames. If 0, the
-        peer stops sending content frames.
+:param active: If 1, the peer starts sending content frames. If 0, the peer stops sending content frames.
         """
         self._send(FrameChannelFlow(active))
 
     def channel_flow_ok(self, active=None):
-        """Confirms to the peer that a flow command was received and processed.
+        """.. warning:: This is an asynchronous method.
 
-        :param active: Confirms the setting of the processed flow method: 1
-        means the peer will start sending or continue to send content frames; 0
-        means it will not.
+Confirms to the peer that a flow command was received and processed.
+
+:param active: Confirms the setting of the processed flow method: 1 means the peer will start sending or continue to send content frames; 0 means it will not.
         """
         self._send(FrameChannelFlowOk(active))
 
@@ -1679,22 +1658,18 @@ class FrameWriter(object):
     def channel_close(self, reply_code=200, reply_text='', class_id=0, method_id=0):
         """This method indicates that the sender wants to close the channel.
 
-        This may be due to internal conditions (e.g. a forced shut-down) or due
-        to an error handling a specific method, i.e. an exception. When a close
-        is due to an exception, the sender provides the class and method id of
-        the method which caused the exception.
+This may be due to internal conditions (e.g. a forced shut-down) or due to an error handling a specific method, i.e. an exception. When a close is due to an exception, the sender provides the class and method id of the method which caused the exception.
 
-        :param class_id: When the close is provoked by a method exception, this
-        is the class of the method.
+:param class_id: When the close is provoked by a method exception, this is the class of the method.
 
-        :param method_id: When the close is provoked by a method exception,
-        this is the ID of the method.
+:param method_id: When the close is provoked by a method exception, this is the ID of the method.
         """
         self._send(FrameChannelClose(reply_code, reply_text, class_id, method_id))
 
     def channel_close_ok(self, ):
-        """This method confirms a Channel.Close method and tells the recipient
-        that it is safe to release resources for the channel.
+        """.. warning:: This is an asynchronous method.
+
+This method confirms a Channel.Close method and tells the recipient that it is safe to release resources for the channel.
         """
         self._send(FrameChannelCloseOk())
 
@@ -1706,35 +1681,19 @@ class FrameWriter(object):
 
     @syncmethod('exchange.declare-ok')
     def exchange_declare(self, exchange=None, type='direct', passive=False, durable=False, auto_delete=False, internal=False, arguments={}):
-        """This method creates an exchange if it does not already exist, and if
-        the exchange exists, verifies that it is of the correct and expected class.
+        """This method creates an exchange if it does not already exist, and if the exchange exists, verifies that it is of the correct and expected class.
 
-        :param type: Each exchange belongs to one of a set of exchange types
-        implemented by the server. The exchange types define the functionality
-        of the exchange - i.e. how messages are routed through it. It is not
-        valid or meaningful to attempt to change the type of an existing exchange.
+:param type: Each exchange belongs to one of a set of exchange types implemented by the server. The exchange types define the functionality of the exchange - i.e. how messages are routed through it. It is not valid or meaningful to attempt to change the type of an existing exchange.
 
-        :param passive: If set, the server will reply with Declare-Ok if the
-        exchange already exists with the same name, and raise an error if not.
-        The client can use this to check whether an exchange exists without
-        modifying the server state. When set, all other method fields except
-        name and no-wait are ignored. A declare with both passive and no-wait
-        has no effect. Arguments are compared for semantic equivalence.
+:param passive: If set, the server will reply with Declare-Ok if the exchange already exists with the same name, and raise an error if not. The client can use this to check whether an exchange exists without modifying the server state. When set, all other method fields except name and no-wait are ignored. A declare with both passive and no-wait has no effect. Arguments are compared for semantic equivalence.
 
-        :param durable: If set when creating a new exchange, the exchange will
-        be marked as durable. Durable exchanges remain active when a server
-        restarts. Non-durable exchanges (transient exchanges) are purged
-        if/when a server restarts.
+:param durable: If set when creating a new exchange, the exchange will be marked as durable. Durable exchanges remain active when a server restarts. Non-durable exchanges (transient exchanges) are purged if/when a server restarts.
 
-        :param auto_delete: If set, the exchange is deleted when all queues
-        have finished using it.
+:param auto_delete: If set, the exchange is deleted when all queues have finished using it.
 
-        :param internal: If set, the exchange may not be used directly by
-        publishers, but only when bound to other exchanges. Internal exchanges
-        are used to construct wiring that is not visible to applications.
+:param internal: If set, the exchange may not be used directly by publishers, but only when bound to other exchanges. Internal exchanges are used to construct wiring that is not visible to applications.
 
-        :param arguments: A set of arguments for the declaration. The syntax
-        and semantics of these arguments depends on the server implementation.
+:param arguments: A set of arguments for the declaration. The syntax and semantics of these arguments depends on the server implementation.
         """
         self._send(FrameExchangeDeclare(0, exchange, type, passive, durable, auto_delete, internal, 0, arguments))
 
@@ -1742,11 +1701,9 @@ class FrameWriter(object):
     def exchange_delete(self, exchange=None, if_unused=False):
         """This method deletes an exchange.
 
-        When an exchange is deleted all queue bindings on the exchange are cancelled.
+When an exchange is deleted all queue bindings on the exchange are cancelled.
 
-        :param if_unused: If set, the server will only delete the exchange if
-        it has no queue bindings. If the exchange has queue bindings the server
-        does not delete it but raises a channel exception instead.
+:param if_unused: If set, the server will only delete the exchange if it has no queue bindings. If the exchange has queue bindings the server does not delete it but raises a channel exception instead.
         """
         self._send(FrameExchangeDelete(0, exchange, if_unused, 0))
 
@@ -1754,17 +1711,13 @@ class FrameWriter(object):
     def exchange_bind(self, destination=None, source=None, routing_key='', arguments={}):
         """This method binds an exchange to an exchange.
 
-        :param destination: Specifies the name of the destination exchange to bind.
+:param destination: Specifies the name of the destination exchange to bind.
 
-        :param source: Specifies the name of the source exchange to bind.
+:param source: Specifies the name of the source exchange to bind.
 
-        :param routing_key: Specifies the routing key for the binding. The
-        routing key is used for routing messages depending on the exchange
-        configuration. Not all exchanges use a routing key - refer to the
-        specific exchange documentation.
+:param routing_key: Specifies the routing key for the binding. The routing key is used for routing messages depending on the exchange configuration. Not all exchanges use a routing key - refer to the specific exchange documentation.
 
-        :param arguments: A set of arguments for the binding. The syntax and
-        semantics of these arguments depends on the exchange class.
+:param arguments: A set of arguments for the binding. The syntax and semantics of these arguments depends on the exchange class.
         """
         self._send(FrameExchangeBind(0, destination, source, routing_key, 0, arguments))
 
@@ -1772,13 +1725,13 @@ class FrameWriter(object):
     def exchange_unbind(self, destination=None, source=None, routing_key='', arguments={}):
         """This method unbinds an exchange from an exchange.
 
-        :param destination: Specifies the name of the destination exchange to unbind.
+:param destination: Specifies the name of the destination exchange to unbind.
 
-        :param source: Specifies the name of the source exchange to unbind.
+:param source: Specifies the name of the source exchange to unbind.
 
-        :param routing_key: Specifies the routing key of the binding to unbind.
+:param routing_key: Specifies the routing key of the binding to unbind.
 
-        :param arguments: Specifies the arguments of the binding to unbind.
+:param arguments: Specifies the arguments of the binding to unbind.
         """
         self._send(FrameExchangeUnbind(0, destination, source, routing_key, 0, arguments))
 
@@ -1786,36 +1739,17 @@ class FrameWriter(object):
     def queue_declare(self, queue='', passive=False, durable=False, exclusive=False, auto_delete=False, arguments={}):
         """This method creates or checks a queue.
 
-        When creating a new queue the client can specify various properties
-        that control the durability of the queue and its contents, and the
-        level of sharing for the queue.
+When creating a new queue the client can specify various properties that control the durability of the queue and its contents, and the level of sharing for the queue.
 
-        :param passive: If set, the server will reply with Declare-Ok if the
-        queue already exists with the same name, and raise an error if not. The
-        client can use this to check whether a queue exists without modifying
-        the server state. When set, all other method fields except name and
-        no-wait are ignored. A declare with both passive and no-wait has no
-        effect. Arguments are compared for semantic equivalence.
+:param passive: If set, the server will reply with Declare-Ok if the queue already exists with the same name, and raise an error if not. The client can use this to check whether a queue exists without modifying the server state. When set, all other method fields except name and no-wait are ignored. A declare with both passive and no-wait has no effect. Arguments are compared for semantic equivalence.
 
-        :param durable: If set when creating a new queue, the queue will be
-        marked as durable. Durable queues remain active when a server restarts.
-        Non-durable queues (transient queues) are purged if/when a server
-        restarts. Note that durable queues do not necessarily hold persistent
-        messages, although it does not make sense to send persistent messages
-        to a transient queue.
+:param durable: If set when creating a new queue, the queue will be marked as durable. Durable queues remain active when a server restarts. Non-durable queues (transient queues) are purged if/when a server restarts. Note that durable queues do not necessarily hold persistent messages, although it does not make sense to send persistent messages to a transient queue.
 
-        :param exclusive: Exclusive queues may only be accessed by the current
-        connection, and are deleted when that connection closes. Passive
-        declaration of an exclusive queue by other connections are not allowed.
+:param exclusive: Exclusive queues may only be accessed by the current connection, and are deleted when that connection closes. Passive declaration of an exclusive queue by other connections are not allowed.
 
-        :param auto_delete: If set, the queue is deleted when all consumers
-        have finished using it. The last consumer can be cancelled either
-        explicitly or because its channel is closed. If there was no consumer
-        ever on the queue, it won't be deleted. Applications can explicitly
-        delete auto-delete queues using the Delete method as normal.
+:param auto_delete: If set, the queue is deleted when all consumers have finished using it. The last consumer can be cancelled either explicitly or because its channel is closed. If there was no consumer ever on the queue, it won't be deleted. Applications can explicitly delete auto-delete queues using the Delete method as normal.
 
-        :param arguments: A set of arguments for the declaration. The syntax
-        and semantics of these arguments depends on the server implementation.
+:param arguments: A set of arguments for the declaration. The syntax and semantics of these arguments depends on the server implementation.
         """
         self._send(FrameQueueDeclare(0, queue, passive, durable, exclusive, auto_delete, 0, arguments))
 
@@ -1823,24 +1757,13 @@ class FrameWriter(object):
     def queue_bind(self, queue='', exchange=None, routing_key='', arguments={}):
         """This method binds a queue to an exchange.
 
-        Until a queue is bound it will not receive any messages. In a classic
-        messaging model, store-and-forward queues are bound to a direct
-        exchange and subscription queues are bound to a topic exchange.
+Until a queue is bound it will not receive any messages. In a classic messaging model, store-and-forward queues are bound to a direct exchange and subscription queues are bound to a topic exchange.
 
-        :param queue: Specifies the name of the queue to bind.
+:param queue: Specifies the name of the queue to bind.
 
-        :param routing_key: Specifies the routing key for the binding. The
-        routing key is used for routing messages depending on the exchange
-        configuration. Not all exchanges use a routing key - refer to the
-        specific exchange documentation. If the queue name is empty, the server
-        uses the last queue declared on the channel. If the routing key is also
-        empty, the server uses this queue name for the routing key as well. If
-        the queue name is provided but the routing key is empty, the server
-        does the binding with that empty routing key. The meaning of empty
-        routing keys depends on the exchange implementation.
+:param routing_key: Specifies the routing key for the binding. The routing key is used for routing messages depending on the exchange configuration. Not all exchanges use a routing key - refer to the specific exchange documentation. If the queue name is empty, the server uses the last queue declared on the channel. If the routing key is also empty, the server uses this queue name for the routing key as well. If the queue name is provided but the routing key is empty, the server does the binding with that empty routing key. The meaning of empty routing keys depends on the exchange implementation.
 
-        :param arguments: A set of arguments for the binding. The syntax and
-        semantics of these arguments depends on the exchange class.
+:param arguments: A set of arguments for the binding. The syntax and semantics of these arguments depends on the exchange class.
         """
         self._send(FrameQueueBind(0, queue, exchange, routing_key, 0, arguments))
 
@@ -1848,7 +1771,7 @@ class FrameWriter(object):
     def queue_purge(self, queue=''):
         """This method removes all messages from a queue which are not awaiting acknowledgment.
 
-        :param queue: Specifies the name of the queue to purge.
+:param queue: Specifies the name of the queue to purge.
         """
         self._send(FrameQueuePurge(0, queue, 0))
 
@@ -1856,18 +1779,13 @@ class FrameWriter(object):
     def queue_delete(self, queue='', if_unused=False, if_empty=False):
         """This method deletes a queue.
 
-        When a queue is deleted any pending messages are sent to a dead-letter
-        queue if this is defined in the server configuration, and all consumers
-        on the queue are cancelled.
+When a queue is deleted any pending messages are sent to a dead-letter queue if this is defined in the server configuration, and all consumers on the queue are cancelled.
 
-        :param queue: Specifies the name of the queue to delete.
+:param queue: Specifies the name of the queue to delete.
 
-        :param if_unused: If set, the server will only delete the queue if it
-        has no consumers. If the queue has consumers the server does does not
-        delete it but raises a channel exception instead.
+:param if_unused: If set, the server will only delete the queue if it has no consumers. If the queue has consumers the server does does not delete it but raises a channel exception instead.
 
-        :param if_empty: If set, the server will only delete the queue if it
-        has no messages.
+:param if_empty: If set, the server will only delete the queue if it has no messages.
         """
         self._send(FrameQueueDelete(0, queue, if_unused, if_empty, 0))
 
@@ -1875,13 +1793,13 @@ class FrameWriter(object):
     def queue_unbind(self, queue='', exchange=None, routing_key='', arguments={}):
         """This method unbinds a queue from an exchange.
 
-        :param queue: Specifies the name of the queue to unbind.
+:param queue: Specifies the name of the queue to unbind.
 
-        :param exchange: The name of the exchange to unbind from.
+:param exchange: The name of the exchange to unbind from.
 
-        :param routing_key: Specifies the routing key of the binding to unbind.
+:param routing_key: Specifies the routing key of the binding to unbind.
 
-        :param arguments: Specifies the arguments of the binding to unbind.
+:param arguments: Specifies the arguments of the binding to unbind.
         """
         self._send(FrameQueueUnbind(0, queue, exchange, routing_key, arguments))
 
@@ -1889,54 +1807,29 @@ class FrameWriter(object):
     def basic_qos(self, prefetch_size=0, prefetch_count=0, global_=False):
         """This method requests a specific quality of service.
 
-        The QoS can be specified for the current channel or for all channels on
-        the connection. The particular properties and semantics of a qos method
-        always depend on the content class semantics. Though the qos method
-        could in principle apply to both peers, it is currently meaningful only
-        for the server.
+The QoS can be specified for the current channel or for all channels on the connection. The particular properties and semantics of a qos method always depend on the content class semantics. Though the qos method could in principle apply to both peers, it is currently meaningful only for the server.
 
-        :param prefetch_size: The client can request that messages be sent in
-        advance so that when the client finishes processing a message, the
-        following message is already held locally, rather than needing to be
-        sent down the channel. Prefetching gives a performance improvement.
-        This field specifies the prefetch window size in octets. The server
-        will send a message in advance if it is equal to or smaller in size
-        than the available prefetch size (and also falls into other prefetch
-        limits). May be set to zero, meaning "no specific limit", although
-        other prefetch limits may still apply. The prefetch-size is ignored if
-        the no-ack option is set.
+:param prefetch_size: The client can request that messages be sent in advance so that when the client finishes processing a message, the following message is already held locally, rather than needing to be sent down the channel. Prefetching gives a performance improvement. This field specifies the prefetch window size in octets. The server will send a message in advance if it is equal to or smaller in size than the available prefetch size (and also falls into other prefetch limits). May be set to zero, meaning "no specific limit", although other prefetch limits may still apply. The prefetch-size is ignored if the no-ack option is set.
 
-        :param prefetch_count: Specifies a prefetch window in terms of whole
-        messages. This field may be used in combination with the prefetch-size
-        field; a message will only be sent in advance if both prefetch windows
-        (and those at the channel and connection level) allow it. The
-        prefetch-count is ignored if the no-ack option is set.
+:param prefetch_count: Specifies a prefetch window in terms of whole messages. This field may be used in combination with the prefetch-size field; a message will only be sent in advance if both prefetch windows (and those at the channel and connection level) allow it. The prefetch-count is ignored if the no-ack option is set.
 
-        :param global_: By default the QoS settings apply to the current
-        channel only. If this field is set, they are applied to the entire
-        connection.
+:param global_: By default the QoS settings apply to the current channel only. If this field is set, they are applied to the entire connection.
         """
         self._send(FrameBasicQos(prefetch_size, prefetch_count, global_))
 
     @syncmethod('basic.consume-ok')
     def basic_consume(self, queue='', consumer_tag='', no_local=False, no_ack=False, exclusive=False, arguments={}):
-        """This method asks the server to start a "consumer", which is a transient
-        request for messages from a specific queue.
+        """This method asks the server to start a "consumer", which is a transient request for messages from a specific queue.
 
-        Consumers last as long as the channel they were declared on, or until
-        the client cancels them.
+Consumers last as long as the channel they were declared on, or until the client cancels them.
 
-        :param queue: Specifies the name of the queue to consume from.
+:param queue: Specifies the name of the queue to consume from.
 
-        :param consumer_tag: Specifies the identifier for the consumer. The
-        consumer tag is local to a channel, so two clients can use the same
-        consumer tags. If this field is empty the server will generate a unique tag.
+:param consumer_tag: Specifies the identifier for the consumer. The consumer tag is local to a channel, so two clients can use the same consumer tags. If this field is empty the server will generate a unique tag.
 
-        :param exclusive: Request exclusive consumer access, meaning only this
-        consumer can access the queue.
+:param exclusive: Request exclusive consumer access, meaning only this consumer can access the queue.
 
-        :param arguments: A set of arguments for the consume. The syntax and
-        semantics of these arguments depends on the server implementation.
+:param arguments: A set of arguments for the consume. The syntax and semantics of these arguments depends on the server implementation.
         """
         self._send(FrameBasicConsume(0, queue, consumer_tag, no_local, no_ack, exclusive, 0, arguments))
 
@@ -1944,135 +1837,88 @@ class FrameWriter(object):
     def basic_cancel(self, consumer_tag=None):
         """This method cancels a consumer.
 
-        This does not affect already delivered messages, but it does mean the
-        server will not send any more messages for that consumer. The client
-        may receive an arbitrary number of messages in between sending the
-        cancel method and receiving the cancel-ok reply. It may also be sent
-        from the server to the client in the event of the consumer being
-        unexpectedly cancelled (i.e. cancelled for any reason other than the
-        server receiving the corresponding basic.cancel from the client). This
-        allows clients to be notified of the loss of consumers due to events
-        such as queue deletion. Note that as it is not a MUST for clients to
-        accept this method from the client, it is advisable for the broker to
-        be able to identify those clients that are capable of accepting the
-        method, through some means of capability negotiation.
+This does not affect already delivered messages, but it does mean the server will not send any more messages for that consumer. The client may receive an arbitrary number of messages in between sending the cancel method and receiving the cancel-ok reply. It may also be sent from the server to the client in the event of the consumer being unexpectedly cancelled (i.e. cancelled for any reason other than the server receiving the corresponding basic.cancel from the client). This allows clients to be notified of the loss of consumers due to events such as queue deletion. Note that as it is not a MUST for clients to accept this method from the client, it is advisable for the broker to be able to identify those clients that are capable of accepting the method, through some means of capability negotiation.
         """
         self._send(FrameBasicCancel(consumer_tag, 0))
 
     def basic_publish(self, exchange='', routing_key='', mandatory=False, immediate=False, headers={}, body=''):
-        """This method publishes a message to a specific exchange.
+        """.. warning:: This is an asynchronous method.
 
-        The message will be routed to queues as defined by the exchange
-        configuration and distributed to any active consumers when the
-        transaction, if any, is committed.
+This method publishes a message to a specific exchange.
 
-        :param exchange: Specifies the name of the exchange to publish to. The
-        exchange name can be empty, meaning the default exchange. If the
-        exchange name is specified, and that exchange does not exist, the
-        server will raise a channel exception.
+The message will be routed to queues as defined by the exchange configuration and distributed to any active consumers when the transaction, if any, is committed.
 
-        :param routing_key: Specifies the routing key for the message. The
-        routing key is used for routing messages depending on the exchange configuration.
+:param exchange: Specifies the name of the exchange to publish to. The exchange name can be empty, meaning the default exchange. If the exchange name is specified, and that exchange does not exist, the server will raise a channel exception.
 
-        :param mandatory: This flag tells the server how to react if the
-        message cannot be routed to a queue. If this flag is set, the server
-        will return an unroutable message with a Return method. If this flag is
-        zero, the server silently drops the message.
+:param routing_key: Specifies the routing key for the message. The routing key is used for routing messages depending on the exchange configuration.
 
-        :param immediate: This flag tells the server how to react if the
-        message cannot be routed to a queue consumer immediately. If this flag
-        is set, the server will return an undeliverable message with a Return
-        method. If this flag is zero, the server will queue the message, but
-        with no guarantee that it will ever be consumed.
+:param mandatory: This flag tells the server how to react if the message cannot be routed to a queue. If this flag is set, the server will return an unroutable message with a Return method. If this flag is zero, the server silently drops the message.
+
+:param immediate: This flag tells the server how to react if the message cannot be routed to a queue consumer immediately. If this flag is set, the server will return an undeliverable message with a Return method. If this flag is zero, the server will queue the message, but with no guarantee that it will ever be consumed.
         """
         self._send_message(FrameBasicPublish(0, exchange, routing_key, mandatory, immediate), headers, body)
 
     @syncmethod('basic.get-ok', 'basic.get-empty')
     def basic_get(self, queue='', no_ack=False):
-        """This method provides a direct access to the messages in a queue using a
-        synchronous dialogue that is designed for specific types of application
-        where synchronous functionality is more important than performance.
+        """This method provides a direct access to the messages in a queue using a synchronous dialogue that is designed for specific types of application where synchronous functionality is more important than performance.
 
-        :param queue: Specifies the name of the queue to get a message from.
+:param queue: Specifies the name of the queue to get a message from.
         """
         self._send(FrameBasicGet(0, queue, no_ack))
 
     def basic_ack(self, delivery_tag=0, multiple=False):
-        """When sent by the client, this method acknowledges one or more messages
-        delivered via the Deliver or Get-Ok methods.
+        """.. warning:: This is an asynchronous method.
 
-        When sent by server, this method acknowledges one or more messages
-        published with the Publish method on a channel in confirm mode. The
-        acknowledgement can be for a single message or a set of messages up to
-        and including a specific message.
+When sent by the client, this method acknowledges one or more messages delivered via the Deliver or Get-Ok methods.
 
-        :param multiple: If set to 1, the delivery tag is treated as "up to and
-        including", so that multiple messages can be acknowledged with a single
-        method. If set to zero, the delivery tag refers to a single message. If
-        the multiple field is 1, and the delivery tag is zero, this indicates
-        acknowledgement of all outstanding messages.
+When sent by server, this method acknowledges one or more messages published with the Publish method on a channel in confirm mode. The acknowledgement can be for a single message or a set of messages up to and including a specific message.
+
+:param multiple: If set to 1, the delivery tag is treated as "up to and including", so that multiple messages can be acknowledged with a single method. If set to zero, the delivery tag refers to a single message. If the multiple field is 1, and the delivery tag is zero, this indicates acknowledgement of all outstanding messages.
         """
         self._send(FrameBasicAck(delivery_tag, multiple))
 
     def basic_reject(self, delivery_tag=0, requeue=True):
-        """This method allows a client to reject a message.
+        """.. warning:: This is an asynchronous method.
 
-        It can be used to interrupt and cancel large incoming messages, or
-        return untreatable messages to their original queue.
+This method allows a client to reject a message.
 
-        :param requeue: If requeue is true, the server will attempt to requeue
-        the message. If requeue is false or the requeue attempt fails the
-        messages are discarded or dead-lettered.
+It can be used to interrupt and cancel large incoming messages, or return untreatable messages to their original queue.
+
+:param requeue: If requeue is true, the server will attempt to requeue the message. If requeue is false or the requeue attempt fails the messages are discarded or dead-lettered.
         """
         self._send(FrameBasicReject(delivery_tag, requeue))
 
     def basic_recover_async(self, requeue=False):
-        """This method asks the server to redeliver all unacknowledged messages on
-        a specified channel.
+        """.. warning:: This is an asynchronous method.
 
-        Zero or more messages may be redelivered. This method is deprecated in
-        favour of the synchronous Recover/Recover-Ok.
+This method asks the server to redeliver all unacknowledged messages on a specified channel.
 
-        :param requeue: If this field is zero, the message will be redelivered
-        to the original recipient. If this bit is 1, the server will attempt to
-        requeue the message, potentially then delivering it to an alternative
-        subscriber.
+Zero or more messages may be redelivered. This method is deprecated in favour of the synchronous Recover/Recover-Ok.
+
+:param requeue: If this field is zero, the message will be redelivered to the original recipient. If this bit is 1, the server will attempt to requeue the message, potentially then delivering it to an alternative subscriber.
         """
         self._send(FrameBasicRecoverAsync(requeue))
 
+    @syncmethod('basic.recover-ok')
     def basic_recover(self, requeue=False):
-        """This method asks the server to redeliver all unacknowledged messages on
-        a specified channel.
+        """This method asks the server to redeliver all unacknowledged messages on a specified channel.
 
-        Zero or more messages may be redelivered. This method replaces the
-        asynchronous Recover.
+Zero or more messages may be redelivered. This method replaces the asynchronous Recover.
 
-        :param requeue: If this field is zero, the message will be redelivered
-        to the original recipient. If this bit is 1, the server will attempt to
-        requeue the message, potentially then delivering it to an alternative
-        subscriber.
+:param requeue: If this field is zero, the message will be redelivered to the original recipient. If this bit is 1, the server will attempt to requeue the message, potentially then delivering it to an alternative subscriber.
         """
         self._send(FrameBasicRecover(requeue))
 
     def basic_nack(self, delivery_tag=0, multiple=False, requeue=True):
-        """This method allows a client to reject one or more incoming messages.
+        """.. warning:: This is an asynchronous method.
 
-        It can be used to interrupt and cancel large incoming messages, or
-        return untreatable messages to their original queue. This method is
-        also used by the server to inform publishers on channels in confirm
-        mode of unhandled messages. If a publisher receives this method, it
-        probably needs to republish the offending messages.
+This method allows a client to reject one or more incoming messages.
 
-        :param multiple: If set to 1, the delivery tag is treated as "up to and
-        including", so that multiple messages can be rejected with a single
-        method. If set to zero, the delivery tag refers to a single message. If
-        the multiple field is 1, and the delivery tag is zero, this indicates
-        rejection of all outstanding messages.
+It can be used to interrupt and cancel large incoming messages, or return untreatable messages to their original queue. This method is also used by the server to inform publishers on channels in confirm mode of unhandled messages. If a publisher receives this method, it probably needs to republish the offending messages.
 
-        :param requeue: If requeue is true, the server will attempt to requeue
-        the message. If requeue is false or the requeue attempt fails the
-        messages are discarded or dead-lettered. Clients receiving the Nack
-        methods should ignore this flag.
+:param multiple: If set to 1, the delivery tag is treated as "up to and including", so that multiple messages can be rejected with a single method. If set to zero, the delivery tag refers to a single message. If the multiple field is 1, and the delivery tag is zero, this indicates rejection of all outstanding messages.
+
+:param requeue: If requeue is true, the server will attempt to requeue the message. If requeue is false or the requeue attempt fails the messages are discarded or dead-lettered. Clients receiving the Nack methods should ignore this flag.
         """
         self._send(FrameBasicNack(delivery_tag, multiple, requeue))
 
@@ -2080,28 +1926,23 @@ class FrameWriter(object):
     def tx_select(self, ):
         """This method sets the channel to use standard transactions.
 
-        The client must use this method at least once on a channel before using
-        the Commit or Rollback methods.
+The client must use this method at least once on a channel before using the Commit or Rollback methods.
         """
         self._send(FrameTxSelect())
 
     @syncmethod('tx.commit-ok')
     def tx_commit(self, ):
-        """This method commits all message publications and acknowledgments
-        performed in the current transaction.
+        """This method commits all message publications and acknowledgments performed in the current transaction.
 
-        A new transaction starts immediately after a commit.
+A new transaction starts immediately after a commit.
         """
         self._send(FrameTxCommit())
 
     @syncmethod('tx.rollback-ok')
     def tx_rollback(self, ):
-        """This method abandons all message publications and acknowledgments
-        performed in the current transaction.
+        """This method abandons all message publications and acknowledgments performed in the current transaction.
 
-        A new transaction starts immediately after a rollback. Note that
-        unacked messages will not be automatically redelivered by rollback; if
-        that is required an explicit recover call should be issued.
+A new transaction starts immediately after a rollback. Note that unacked messages will not be automatically redelivered by rollback; if that is required an explicit recover call should be issued.
         """
         self._send(FrameTxRollback())
 
@@ -2109,10 +1950,8 @@ class FrameWriter(object):
     def confirm_select(self, ):
         """This method sets the channel to use publisher acknowledgements.
 
-        The client can only use this method on a non-transactional channel.
+The client can only use this method on a non-transactional channel.
 
-        :param nowait: If set, the server will not respond to the method. The
-        client should not wait for a reply method. If the server could not
-        complete the method it will raise a channel or connection exception.
+:param nowait: If set, the server will not respond to the method. The client should not wait for a reply method. If the server could not complete the method it will raise a channel or connection exception.
         """
         self._send(FrameConfirmSelect(0))

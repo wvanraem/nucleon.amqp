@@ -86,22 +86,28 @@ class TestBasic(base.TestCase):
                 msgs.append(result)
 
             result = channel.basic_get(queue=self.name)
-            self.assertEqual('body' in result, False)
-
-            self.assertEqual(len(channel.channels.free_channels), 1)
-            self.assertEqual(channel.channels.free_channel_numbers[-1], 7)
-            for msg in msgs:
-                channel.basic_ack(msg)
-            self.assertEqual(len(channel.channels.free_channels), 5)
-            self.assertEqual(channel.channels.free_channel_numbers[-1], 7)
+            self.assertTrue(result is None)
 
             channel.queue_delete(queue=self.name)
 
-    def test_basic_publish_bad_exchange(self):
+    def test_basic_publish_bad_exchange_tx(self):
         client = Connection(self.amqp_url)
         client.connect()
 
         with client.channel() as channel:
+            with self.assertRaises(exceptions.NotFound):
+                channel.tx_select()
+                channel.basic_publish(
+                    exchange='invalid_exchange',
+                    routing_key='xxx', body='')
+                channel.tx_commit()
+
+    def test_basic_publish_bad_exchange_publisher_acks(self):
+        client = Connection(self.amqp_url)
+        client.connect()
+
+        with client.channel() as channel:
+            channel.confirm_select()
             with self.assertRaises(exceptions.NotFound):
                 channel.basic_publish(
                     exchange='invalid_exchange',
@@ -112,11 +118,13 @@ class TestBasic(base.TestCase):
         client.connect()
 
         with client.channel() as channel:
+            channel.confirm_select()
             with self.assertRaises(exceptions.NoRoute):
                 channel.basic_publish(exchange='', routing_key=self.name,
                                                mandatory=True, body='')
 
         with client.channel() as channel:
+            channel.confirm_select()
             channel.queue_declare(queue=self.name)
 
             client.basic_publish(exchange='', routing_key=self.name,
@@ -152,7 +160,7 @@ class TestBasic(base.TestCase):
 
             result = channel.basic_get(queue=self.name, no_ack=True)
             self.assertTrue('delivery_mode' in result.headers)
-            self.assertEquals(result['headers']['delivery_mode'], 2)
+            self.assertEquals(result.headers['delivery_mode'], 2)
 
             result = channel.basic_get(queue=self.name, no_ack=True)
             self.assertTrue('delivery_mode' in result.headers)
@@ -173,7 +181,7 @@ class TestBasic(base.TestCase):
             r = channel.basic_get(queue=self.name)
             self.assertEqual(r.body, 'a')
             self.assertTrue(not r.redelivered)
-            channel.basic_reject(r)
+            channel.basic_reject(r.delivery_tag)
 
             r = channel.basic_get(queue=self.name)
             self.assertEqual(r.body, 'a')
@@ -193,7 +201,7 @@ class TestBasic(base.TestCase):
             r = channel.basic_get(queue=self.name)
             self.assertEqual(r.body, 'a')
             self.assertTrue(not r.redelivered)
-            channel.basic_reject(r, requeue=False)
+            channel.basic_reject(r.delivery_tag, requeue=False)
 
             r = channel.basic_get(queue=self.name)
             self.assertTrue(r is None)
@@ -208,8 +216,8 @@ class TestBasic(base.TestCase):
             channel.exchange_declare(exchange=self.name1, type='fanout')
             channel.queue_declare(
                 queue=self.name, arguments={'x-dead-letter-exchange': self.name1})
-            channel.queue_declare(exclusive=True)
-            dlxqname = ['queue']
+            queue = channel.queue_declare(exclusive=True)
+            dlxqname = queue.queue
 
             channel.queue_bind(queue=dlxqname, exchange=self.name1)
             channel.basic_publish(exchange='', routing_key=self.name,
@@ -218,12 +226,13 @@ class TestBasic(base.TestCase):
             r = channel.basic_get(queue=self.name)
             self.assertEqual(r.body, 'a')
             self.assertTrue(not r.redelivered)
-            channel.basic_reject(r, requeue=False)
+            channel.basic_reject(r.delivery_tag, requeue=False)
 
             r = channel.basic_get(queue=self.name)
             self.assertTrue(r is None)
 
             r = channel.basic_get(queue=dlxqname)
+            assert r is not None
             self.assertEqual(r.body, 'a')
             self.assertEqual(r.headers['x-death'][0]['reason'], 'rejected')
             self.assertTrue(not r.redelivered)
@@ -278,17 +287,25 @@ class TestBasic(base.TestCase):
             queue = channel.basic_consume(queue=self.name)
 
             with self.assertRaises(exceptions.PreconditionFailed):
+                channel.tx_select()
                 channel.basic_ack(999)
+                channel.tx_commit()
 
         with client.channel() as channel:
-            result = client.basic_consume(queue=self.name)
+            queue = channel.basic_consume(queue=self.name)
 
-            client.basic_ack(result)
+            result = queue.get()
 
-            with self.assertRaises(AssertionError):
-                client.basic_ack(result)
+            channel.tx_select()
+            channel.basic_ack(result.delivery_tag)
+            channel.tx_commit()
 
-            client.queue_delete(queue=self.name)
+            with self.assertRaises(exceptions.PreconditionFailed):
+                channel.basic_ack(result.delivery_tag)
+                channel.tx_commit()
+
+        with client.channel() as channel:
+            channel.queue_delete(queue=self.name)
 
     def test_basic_cancel(self):
         client = Connection(self.amqp_url)
@@ -306,7 +323,7 @@ class TestBasic(base.TestCase):
             for i in range(2):
                 msg1 = queue.get()
                 self.assertEqual(msg1.body, 'a')
-                channel.basic_ack(msg1)
+                channel.basic_ack(msg1.delivery_tag)
 
             result = channel.basic_cancel(queue.consumer_tag)
 
@@ -315,12 +332,9 @@ class TestBasic(base.TestCase):
             channel.basic_publish(exchange='', routing_key=self.name,
                                            body='b')
 
-            try:
-                msg = queue.get(1)
-            except Empty:
-                pass
-            else:
-                assert False, "Received message %s" % msg.body
+            with self.assertRaises(Empty):
+                queue.get(timeout=0.5)
+
             channel.queue_delete(queue=self.name)
 
     def test_close(self):
@@ -328,7 +342,7 @@ class TestBasic(base.TestCase):
         client.connect()
 
         with client.channel() as channel:
-            channel.close()
+            channel.channel_close()
 
     def test_basic_consume_fail(self):
         client = Connection(self.amqp_url)
@@ -343,8 +357,8 @@ class TestBasic(base.TestCase):
         client.connect()
 
         with client.channel() as channel:
-            channel.queue_declare()
-            qname = 'queue'
+            decl = channel.queue_declare()
+            qname = decl.queue
 
             channel.basic_publish(exchange='', routing_key=qname, body='a')
 
@@ -366,20 +380,21 @@ class TestBasic(base.TestCase):
                 body=msg
             )
 
-        queue = channel.basic_consume(queue=self.name, prefetch_count=1)
-        result = queue.get_nowait()
+        channel.basic_qos(prefetch_count=1)
+        queue = channel.basic_consume(queue=self.name)
+        result = queue.get(timeout=0.1)
         self.assertEqual(result.body, 'a')
 
         with self.assertRaises(Empty):
-            queue.get_nowait()
+            queue.get(timeout=0.1)
 
         # Now adjust QoS
-        channel.basic_qos(queue.consumer_tag, prefetch_count=2)
-        result = queue.get_nowait()
+        channel.basic_qos(prefetch_count=2)
+        result = queue.get(timeout=0.1)
         self.assertEqual(result.body, 'b')
 
         with self.assertRaises(Empty):
-            queue.get_nowait()
+            queue.get(timeout=0.1)
 
         channel.queue_delete(queue=self.name)
 

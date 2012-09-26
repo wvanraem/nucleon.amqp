@@ -83,6 +83,7 @@ class Channel(spec.FrameWriter):
     def __init__(self, connection, id):
         self.connection = connection
         self.id = id
+        self.exc = None
         self.listeners = EventRegister()
         self.queue = Queue()
         self.listeners.set_handler('channel.close', self.on_channel_close)
@@ -103,6 +104,7 @@ class Channel(spec.FrameWriter):
     def on_error(self, exc):
         """Handle an error that is causing this channel to close."""
         self.connection._remove_channel(self.id)
+        self.exc = exc
         self.connection = None
         for handler in self.listeners.get_error_handlers():
             self.queue.put((handler, (exc,)))
@@ -117,12 +119,14 @@ class Channel(spec.FrameWriter):
 
     def _send(self, frame):
         """Send one frame over the channel."""
-        print "s<-c", frame.name
+        if self.exc:
+            raise self.exc
         self.connection._send_frames(self.id, frame.encode())
 
     def _send_message(self, frame, headers, payload):
         """Send method, header and body frames over the channel."""
-        print "s<-c", frame.name
+        if self.exc:
+            raise self.exc
         fs = encode_message(frame, headers, payload, self.connection.frame_max)
         self.connection._send_frames(self.id, fs)
 
@@ -278,6 +282,7 @@ class StartChannel(Channel):
         super(StartChannel, self).__init__(connection, id)
         self.listeners.set_handler('connection.start', self.on_start)
         self.listeners.set_handler('connection.tune', self.on_tune)
+        self.listeners.set_handler('connection.close-ok', self.on_close_ok)
 
     def on_start(self, frame):
         """Handle the start frame."""
@@ -298,6 +303,9 @@ class StartChannel(Channel):
             auth,
             'en_US'
         )
+
+    def on_close_ok(self, frame):
+        self.connection._on_normal_disconnect()
 
     def on_tune(self, frame):
         """Handle the tune message.
@@ -393,3 +401,27 @@ class MessageChannel(Channel):
         """Wrap basic_get to return None if there is no message in the queue."""
         r = super(MessageChannel, self).basic_get(*args, **kwargs)
         return r if isinstance(r, Message) else None
+
+    def confirm_select(self, nowait=False):
+        """Turn on RabbitMQ's publisher acknowledgements.
+
+        See http://www.rabbitmq.com/confirms.html
+
+        There are two things that need to be done:
+
+        * Swap basic_publish to a version that blocks waiting for the corresponding ack.
+        * Support nowait (because this method blocks or not depending on that argument)
+
+        """
+        self.basic_publish = self.basic_publish_with_confirm
+
+        if nowait:
+            super(MessageChannel, self).confirm_select(nowait=nowait)
+        else:
+            # Send frame directly, as no callback will be received
+            self._send(spec.FrameConfirmSelect(1))
+
+    def basic_publish_with_confirm(self, *args, **kwargs):
+        """Version of basic publish that blocks waiting for confirm."""
+        method = super(MessageChannel, self).basic_publish
+        return self._call_sync(method, ('basic.ack',), *args, **kwargs)
