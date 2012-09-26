@@ -27,6 +27,17 @@ STATE_DISCONNECTING = 3
 
 
 class Connection(object):
+    """A connection to an AMQP server.
+
+    This class deals with establishing and reconnecting errors, and routes
+    messages received off the wire to handlers registered with the
+    corresponding channel.
+
+    AMQP sends connection-level errors (connection.close) that cause the
+    connection to close; to support this we dispatch such errors to all
+    channels.
+
+    """
     frame_max = 131072   # adjusted by Tune frame
     channel_max = 65535  # adjusted by Tune method
     MAX_SEND_QUEUE = 32  # frames

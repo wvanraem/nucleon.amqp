@@ -295,45 +295,7 @@ def _method_params_list(m):
 
 
 def print_writer_class(methods):
-    print '''\n
-def syncmethod(*responses):
-    """Decorator for assigning appropriate responses for an AMQP method."""
-    def decorate(method):
-        @wraps(method)
-        def wrapper(self, *args, **kwargs):
-            bound = partial(method, self)
-            return self._call_sync(bound, responses, *args, **kwargs)
-        return wrapper
-    return decorate
-
-
-class FrameWriter(object):
-    """Interface for converting AMQP client method calls to AMQP frames.
-
-    The underlying transport is not defined here; subclasses can implement
-    this by defining ._send() and ._send_message() to encode the frame and
-    ultimately write it to the wire.
-    """
-
-    def _send(self, frame):
-        raise NotImplementedError(
-            "Subclasses must implement this method to send a method frame."
-        )
-
-    def _send_message(self, frame, headers, payload):
-        raise NotImplementedError(
-            "Subclasses must implement this method to send a method frame "
-            "plus message headers and payload."
-        )
-
-    def _call_sync(self, method, responses, *args, **kwargs):
-        """Hook for making a method call synchronous.
-
-        Subclasses should re-implement this method to call method in such a way
-        that the client will receive one of the methods in responses as a
-        response.
-        """
-        return method(*args, **kwargs)'''
+    print open('templates/framewriter.py.template').read()
 
     for m in methods:
         method_name = pyize(m.klass.name + '_' + m.name)

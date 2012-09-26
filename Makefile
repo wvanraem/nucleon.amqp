@@ -18,6 +18,7 @@ nucleon/amqp/spec.py: codegen.py codegen_helpers.py \
 		$(CODEGEN_DIR)/amqp_codegen.py \
 		$(AMQP_JSON_SPEC) amqp-accepted-by-update.json \
 		templates/spec.py.template \
+		templates/framewriter.py.template \
 		amqp0-9-1.extended.xml
 	$(PYTHON) codegen.py spec $(AMQP_JSON_SPEC) $@
 
@@ -25,6 +26,7 @@ nucleon/amqp/spec_exceptions.py: codegen.py codegen_helpers.py \
 		$(CODEGEN_DIR)/amqp_codegen.py \
 		$(AMQP_JSON_SPEC) amqp-accepted-by-update.json \
 		templates/spec_exceptions.py.template \
+		templates/framewriter.py.template \
 		amqp0-9-1.extended.xml
 	$(PYTHON) codegen.py spec_exceptions $(AMQP_JSON_SPEC) $@
 
