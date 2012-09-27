@@ -10,6 +10,8 @@ from gevent import Timeout
 
 import base
 
+from utils import with_timeout
+
 
 class TestBasic(base.TestCase):
     def test_consume_queue(self):
@@ -113,25 +115,31 @@ class TestBasic(base.TestCase):
                     exchange='invalid_exchange',
                     routing_key='xxx', body='')
 
+    @with_timeout
     def test_basic_return(self):
         client = Connection(self.amqp_url)
         client.connect()
 
         with client.channel() as channel:
             channel.confirm_select()
-            with self.assertRaises(exceptions.NoRoute):
+            with self.assertRaises(exceptions.MessageReturnedNoRoute):
                 channel.basic_publish(exchange='', routing_key=self.name,
                                                mandatory=True, body='')
+
+    @with_timeout
+    def test_basic_return2(self):
+        client = Connection(self.amqp_url)
+        client.connect()
 
         with client.channel() as channel:
             channel.confirm_select()
             channel.queue_declare(queue=self.name)
 
-            client.basic_publish(exchange='', routing_key=self.name,
+            channel.basic_publish(exchange='', routing_key=self.name,
                                            mandatory=True, body='')
 
-            with self.assertRaises(exceptions.NoConsumers):
-                client.basic_publish(exchange='', routing_key=self.name,
+            with self.assertRaises(exceptions.MessageReturnedNoConsumers):
+                channel.basic_publish(exchange='', routing_key=self.name,
                                            immediate=True, body='')
 
         with client.channel() as channel:

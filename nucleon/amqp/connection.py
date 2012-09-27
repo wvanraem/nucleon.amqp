@@ -169,6 +169,9 @@ class Connection(object):
                 payload = reader.read(size + 1)
                 assert payload[-1] == '\xCE'
 
+                if self.debug:
+                    self._debug_print('s->c', frame_header + payload)
+
                 buffer = DecodeBuffer(payload)
                 if frame_type == 0x01:  # Method frame
                     method_id, = buffer.read('!I')
@@ -180,15 +183,19 @@ class Connection(object):
                     self.inbound_props(channel, body_size, props)
                 elif frame_type == 0x03:  # body frame
                     self.inbound_body(channel, payload[:-1])
-                elif frame_type == 0x04:
-                    pass  # heartbeat frame
+                elif frame_type in [0x04, 0x08]:
+                    # Heartbeat frame
+                    #
+                    # Catch it as both 0x04 and 0x08 - see
+                    # http://www.rabbitmq.com/amqp-0-9-1-errata.html#section_29
+                    pass
                 else:
                     raise ConnectionError("Unknown frame type")
         except Exception as e:
             self.connected_event.set(e)
 
             if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
-                self._on_disconnect(e)
+                self._on_abnormal_disconnect(e)
             else:
                 self.state = STATE_DISCONNECTED
 
@@ -202,8 +209,6 @@ class Connection(object):
                 self.channels[channel] = c
             else:
                 return
-        if self.debug:
-            print 's->c', frame.name
         c._on_method(frame)
 
     def inbound_props(self, channel, body_size, props):
@@ -238,22 +243,22 @@ class Connection(object):
             if msg is None:
                 break
             if self.debug:
-                self._debug_print(msg)
+                self._debug_print('s<-c', msg)
             self.sock.sendall(msg)
 
-    def _debug_print(self, msg):
+    def _debug_print(self, direction, msg):
         try:
             # Print method, for debugging
             type, channel, size = FRAME_HEADER.unpack_from(msg)
             if type == 1:
                 method_id = struct.unpack_from('!I', msg, FRAME_HEADER.size)[0]
-                print 's<-c', spec.METHODS[method_id].name
+                print direction, spec.METHODS[method_id].name
             else:
-                print {
-                    2: 's<-c [headers %d bytes]' % size,
-                    3: 's<-c [payload %d bytes]' % size,
-                    4: 's<-c [heartbeat %d bytes]' % size
-                }[type]
+                print direction, {
+                    2: '[headers %d bytes]',
+                    3: '[payload %d bytes]',
+                    4: '[heartbeat %d bytes]',
+                }[type] % size
         except Exception:
             import traceback
             traceback.print_exc()

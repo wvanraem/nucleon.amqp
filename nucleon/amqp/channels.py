@@ -84,6 +84,7 @@ class Channel(spec.FrameWriter):
         self.connection = connection
         self.id = id
         self.exc = None
+        self._method = None
         self.listeners = EventRegister()
         self.queue = Queue()
         self.listeners.set_handler('channel.close', self.on_channel_close)
@@ -142,11 +143,19 @@ class Channel(spec.FrameWriter):
         self._headers = props
         self._to_read = size
         self._body = StringIO()
+        self._on_content_receive()
 
     def _on_body(self, payload):
         """Called when the channel has received a body frame."""
         self._body.write(payload)
         self._to_read -= len(payload)
+        self._on_content_receive()
+
+    def _on_content_receive(self):
+        """Check whether a full message has been read, and if so, dispatch it.
+
+        No payload frame is sent if the body was empty.
+        """
         if self._to_read <= 0:
             if self._headers is None or self._method is None:
                 return
@@ -328,6 +337,8 @@ class MessageQueue(Queue):
         super(MessageQueue, self).__init__()
 
     def get(self, block=True, timeout=None):
+        if block:
+            self.channel.must_now_block()
         resp = super(MessageQueue, self).get(block=block, timeout=timeout)
         if isinstance(resp, Exception):
             raise resp
@@ -341,16 +352,70 @@ class MessageQueue(Queue):
 
 
 class MessageChannel(Channel):
+    """A channel that adds useful semantics for publishing and consuming messages.
+
+    Semantics that are added:
+
+    * Support for registering consumers to receive basic.deliver events.
+      Consumers also receive errors and are automatically deregistered when
+      basic_cancel is received.
+
+    * Support for the RabbitMQ extension confirm_select, which makes
+      basic_publish block
+
+    * Can check for messages returned with basic_return
+
+    """
     def __init__(self, connection, id):
         super(MessageChannel, self).__init__(connection, id)
         self.consumer_id = 1
         self.consumers = {}
+        self.returned = AsyncResult()
         self.listeners.set_handler('basic.deliver', self.on_deliver)
+        self.listeners.set_handler('basic.return', self.on_basic_return)
         self.listeners.set_handler('basic.cancel-ok', self.on_cancel_ok)
 
     def on_deliver(self, message):
-        """Queue the message for delivery."""
+        """Called when a message is received.
+
+        Dispatches the message to the registered consumer.
+        """
         self.consumers[message.consumer_tag](message)
+
+    def on_basic_return(self, msg):
+        """When we receive a basic.return message, store it.
+
+        The value can later be checked using .check_returned().
+
+        """
+        self.returned.set(msg)
+
+    def check_returned(self):
+        """Raise an error if a message has been returned.
+
+        This also clears the returned frame, with the intention that each
+        basic.return message may cause at most one MessageReturned error.
+
+        """
+        if self._method and self._method.name == 'basic.return':
+            self.must_now_block()
+            returned = self.returned.get()
+        else:
+            try:
+                returned = self.returned.get_nowait()
+            except gevent.Timeout:
+                return
+
+        self.clear_returned()
+        if returned:
+            raise exceptions.return_exception_from_frame(returned)
+
+    def clear_returned(self):
+        """Discard any returned message."""
+        if self.returned.ready():
+            # we can only replace returned if it is ready - otherwise anything
+            # that was blocked waiting would wait forever.
+            self.returned = AsyncResult()
 
     def on_error(self, exc):
         """Override on_error, to pass error to all consumers."""
@@ -384,21 +449,12 @@ class MessageChannel(Channel):
             super(MessageChannel, self).basic_consume(**kwargs)
             return queue
 
-    def _run_with_callback(self, method, *args, **kwargs):
-        """
-        Internal method implements a generic pattern to perform sync and async
-        calls to Puka. If callback is provided, it runs in async mode.
-        """
-        log.debug("%s *%r **%r", method.__name__, args, kwargs)
-        try:
-            callback = kwargs.pop('callback')
-        except KeyError:
-            return self._run_blocking(method, *args, **kwargs)
-        else:
-            return method(*args, callback=callback, **kwargs)
-
     def basic_get(self, *args, **kwargs):
-        """Wrap basic_get to return None if there is no message in the queue."""
+        """Wrap basic_get to return None if the response is basic.get-empty.
+
+        This will be easier for users to check than testing whether a response
+        is get-empty.
+        """
         r = super(MessageChannel, self).basic_get(*args, **kwargs)
         return r if isinstance(r, Message) else None
 
@@ -409,8 +465,11 @@ class MessageChannel(Channel):
 
         There are two things that need to be done:
 
-        * Swap basic_publish to a version that blocks waiting for the corresponding ack.
-        * Support nowait (because this method blocks or not depending on that argument)
+        * Swap basic_publish to a version that blocks waiting for the
+          corresponding ack.
+
+        * Support nowait (because this method blocks or not depending on that
+          argument)
 
         """
         self.basic_publish = self.basic_publish_with_confirm
@@ -421,7 +480,13 @@ class MessageChannel(Channel):
             # Send frame directly, as no callback will be received
             self._send(spec.FrameConfirmSelect(1))
 
-    def basic_publish_with_confirm(self, *args, **kwargs):
+    def basic_publish_with_confirm(self, exchange='', routing_key='', mandatory=False, immediate=False, headers={}, body=''):
         """Version of basic publish that blocks waiting for confirm."""
         method = super(MessageChannel, self).basic_publish
-        return self._call_sync(method, ('basic.ack',), *args, **kwargs)
+        self.clear_returned()
+        ret = self._call_sync(method, ('basic.ack', 'basic.nack'), exchange, routing_key, mandatory, immediate, headers, body)
+        if ret.name == 'basic.nack':
+            raise exceptions.PublishFailed(ret)
+        if mandatory or immediate:
+            self.check_returned()
+        return ret
