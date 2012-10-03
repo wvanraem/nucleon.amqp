@@ -46,6 +46,10 @@ html:
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
+public: html
+	chmod 600 .docs-password
+	rsync -avz --password-file .docs-password _build/html/ docs@bruges.vertulabs.co.uk::docs/nucleon.amqp/
+
 dirhtml:
 	$(SPHINXBUILD) -b dirhtml $(ALLSPHINXOPTS) $(BUILDDIR)/dirhtml
 	@echo

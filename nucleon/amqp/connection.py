@@ -80,10 +80,10 @@ class Connection(object):
         channel = self.allocate_channel()
         try:
             yield channel
+            channel.check_returned()
         finally:
-            pass
-            # if channel.connection and self.state == STATE_CONNECTED:
-            #    channel.channel_close(reply_code=200)
+            if channel.connection and self.state == STATE_CONNECTED:
+                channel.channel_close(reply_code=200)
 
     def connect(self):
         self.connected_event = AsyncResult()

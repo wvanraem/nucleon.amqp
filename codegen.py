@@ -256,7 +256,7 @@ def print_decode_properties(c):
 def get_default_value(f):
     if f.n in ['reply_code']:
         return 200
-    elif f.domain in ['short', 'long', 'longlong']:
+    elif f.domain in ['short', 'long', 'longlong'] and not f.defaultvalue:
         return 0
     return f.defaultvalue
 
