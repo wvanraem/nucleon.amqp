@@ -33,6 +33,7 @@ API Documentation
 .. toctree::
     :maxdepth: 2
 
+    amqp
     asyncmodel
     connection
     queues_and_exchanges

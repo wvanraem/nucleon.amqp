@@ -1,10 +1,10 @@
 import logging
-from functools import partial
 from collections import deque
 from cStringIO import StringIO
 
 import gevent
-from gevent.queue import Queue
+from gevent.queue import Queue, Empty
+from gevent.lock import RLock
 from gevent.event import AsyncResult
 
 from .message import Message
@@ -330,24 +330,51 @@ class StartChannel(Channel):
 
 
 class MessageQueue(Queue):
-    """A queue that can receive exceptions."""
+    """A queue that receives messages from a consumer, and also exceptions."""
     def __init__(self, channel, consumer_tag):
         self.consumer_tag = consumer_tag
         self.channel = channel
+        self.exc = None
+        self.lock = RLock()
         super(MessageQueue, self).__init__()
 
     def get(self, block=True, timeout=None):
+        """Get a message from the queue.
+
+        This method may also raise arbitrary AMQP exceptions, such as
+        ConnectionError when the connection is lost.
+
+        :param block: If True, block until a message is available in the queue.
+            If False, raise Empty immediately if there are no messages in the
+            queue.
+        :param timeout: Time in seconds to wait. If not message is received
+            after this time, Empty is raised.
+
+        """
         if block:
             self.channel.must_now_block()
         resp = super(MessageQueue, self).get(block=block, timeout=timeout)
         if isinstance(resp, Exception):
+            self.put(resp)  # re-queue the exception, as it should be raised
+                            # for all subsequent gets
             raise resp
         return resp
 
     def get_nowait(self):
+        """Get a message from the queue.
+
+        Raises Empty immediately if there are no messages in the queue.
+
+        """
         self.get(False)
 
     def cancel(self):
+        """Cancel consuming with this consumer.
+
+        There may still be messages in the queue, of course, which can still be
+        processed, acknowledged, etc.
+
+        """
         self.channel.basic_cancel(self.consumer_tag)
 
 
@@ -429,15 +456,41 @@ class MessageChannel(Channel):
         We can remove its consumer tag from the registered consumers."""
         del(self.consumers[frame.consumer_tag])
 
-    def basic_consume(self, callback=None, **kwargs):
-        """Register a consumer for an AMQP queue.
+    def basic_consume(self, queue='', no_local=False, no_ack=False, exclusive=False, arguments={}, callback=None):
+        """Begin consuming messages from a queue.
 
-        If a callback is given, this will be called on any message.
+        Consumers last as long as the channel they were declared on, or until
+        the client cancels them.
+
+        :param queue: Specifies the name of the queue to consume from.
+        :param no_local: Do not deliver own messages. If this flag is set the
+            server will not send messages to the connection that published
+            them.
+        :param no_ack: Don't require acknowledgements. If this flag is set the
+            server does not expect acknowledgements for messages. That is, when
+            a message is delivered to the client the server assumes the
+            delivery will succeed and immediately dequeues it. This
+            functionality may increase performance but at the cost of
+            reliability. Messages can get lost if a client dies before they
+            are delivered to the application.
+        :param exclusive: Request exclusive consumer access, meaning only this
+            consumer can access the queue.
+        :param arguments: A set of arguments for the consume. The syntax and
+            semantics of these arguments depends on the server implementation.
+        :param callback: A callback to be called for each message received.
 
         """
         tag = 'ct-%d' % self.consumer_id
         self.consumer_id += 1
-        kwargs['consumer_tag'] = tag
+
+        kwargs = dict(
+            queue=queue,
+            no_local=no_local,
+            no_ack=no_ack,
+            exclusive=exclusive,
+            arguments=arguments,
+            consumer_tag=tag
+        )
 
         if callback is not None:
             self.consumers[tag] = callback

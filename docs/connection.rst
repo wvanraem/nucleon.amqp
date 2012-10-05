@@ -5,8 +5,9 @@ Making AMQP Connections
 
     .. autoclass:: Connection
 
+        .. automethod:: connect
+        .. automethod:: allocate_channel
         .. automethod:: channel
-
         .. automethod:: close
 
 
@@ -63,3 +64,7 @@ connection and release it when done::
             body='this is a message'
         )
 
+The Channel that is returned is actually a subclass called MessageChannel that
+adds default semantics for publishing and consuming messages. For the purposes
+of much of this documentation Channel and MessageChannel can be treated
+interchangeably.

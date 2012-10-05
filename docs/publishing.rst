@@ -13,6 +13,8 @@ The method to publish a method is this:
     .. automethod:: Channel.basic_publish
 
 
+.. _basic-properties:
+
 Basic Message Properties
 ''''''''''''''''''''''''
 

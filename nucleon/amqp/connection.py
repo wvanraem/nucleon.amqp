@@ -76,7 +76,10 @@ class Connection(object):
 
     @contextmanager
     def channel(self):
-        """Acquire a channel and later release it."""
+        """Context manager to acquire a channel.
+
+        The channel will be closed when the context is exited.
+        """
         channel = self.allocate_channel()
         try:
             yield channel
@@ -86,9 +89,19 @@ class Connection(object):
                 channel.channel_close(reply_code=200)
 
     def connect(self):
+        """Open the connection to the server.
+
+        This method blocks until the connection has been opened and handshaking
+        is complete.
+
+        If connection fails, an exception will be raised instead.
+
+        """
         self.connected_event = AsyncResult()
         self._connect()
-        v = self.connected_event.wait()  # Block until the connection is properly ready
+        v = self.connected_event.wait()  # Block until the connection is
+                                         # properly ready
+
         # FFS, AsyncResult.set_exception doesn't work in gevent 1.0b4
         # so we just use normal setting, but with exception types
         if isinstance(v, Exception):
