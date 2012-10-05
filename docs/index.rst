@@ -34,6 +34,7 @@ API Documentation
     :maxdepth: 2
 
     amqp
+    topologies
     asyncmodel
     connection
     queues_and_exchanges

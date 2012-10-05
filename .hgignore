@@ -3,3 +3,4 @@ syntax: glob
 *.swp
 nucleon.amqp.egg-info
 docs/_build
+docs/*.png
