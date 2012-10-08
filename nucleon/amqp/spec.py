@@ -1389,7 +1389,9 @@ def decode_basic_properties(buffer):
         props['app_id'] = buffer.read_string('!B')
     if (flags & 0x0004): # 1 << 2
         props['cluster_id'] = buffer.read_string('!B')
-    return props
+    hs = props.pop('headers', {})
+    hs.update(props)
+    return hs
 
 
 PROPS = {

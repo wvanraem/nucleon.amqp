@@ -100,13 +100,12 @@ class Channel(spec.FrameWriter):
         exc = exceptions.exception_from_frame(frame)
 
         # Let the connection class dispatch this to all channels
-        self.connection.on_error(exc)
+        self.connection._on_error(exc)
 
     def on_error(self, exc):
         """Handle an error that is causing this channel to close."""
         self.connection._remove_channel(self.id)
         self.exc = exc
-        self.connection = None
         for handler in self.listeners.get_error_handlers():
             self.queue.put((handler, (exc,)))
         self.stop_dispatcher()
@@ -224,8 +223,10 @@ class Channel(spec.FrameWriter):
             try:
                 callback(*args)
             except Exception:
-                import traceback
-                traceback.print_exc()
+                # FIXME: log it
+                #import traceback
+                #traceback.print_exc()
+                pass
             if not self.current_is_dispatcher():
                 break
 
@@ -253,6 +254,14 @@ class Channel(spec.FrameWriter):
 
         """
         self.dispatcher = gevent.spawn(self.start_dispatcher)
+
+    def close(self):
+        from .connection import STATE_CONNECTED
+        if self.exc:
+            return
+
+        if self.connection and self.connection.state == STATE_CONNECTED:
+            self.channel_close(reply_code=200)
 
 
 class StartChannel(Channel):
@@ -334,8 +343,6 @@ class MessageQueue(Queue):
     def __init__(self, channel, consumer_tag):
         self.consumer_tag = consumer_tag
         self.channel = channel
-        self.exc = None
-        self.lock = RLock()
         super(MessageQueue, self).__init__()
 
     def get(self, block=True, timeout=None):
@@ -447,7 +454,7 @@ class MessageChannel(Channel):
     def on_error(self, exc):
         """Override on_error, to pass error to all consumers."""
         for consumer in self.consumers.values():
-            self.queue.put((consumer, exc))
+            self.queue.put((consumer, (exc,)))
         super(MessageChannel, self).on_error(exc)
 
     def on_cancel_ok(self, frame):
@@ -498,7 +505,6 @@ class MessageChannel(Channel):
         else:
             queue = MessageQueue(self, tag)
             self.consumers[tag] = queue.put
-            queue.consumer_tag = tag
             super(MessageChannel, self).basic_consume(**kwargs)
             return queue
 
@@ -543,8 +549,3 @@ class MessageChannel(Channel):
         if mandatory or immediate:
             self.check_returned()
         return ret
-
-    def close(self):
-        from .connection import STATE_CONNECTED
-        if self.connection and self.connection.state == STATE_CONNECTED:
-            self.channel_close(reply_code=200)

@@ -1,4 +1,3 @@
-from nucleon.amqp.urls import parse_amqp_url
 from nucleon.amqp.connection import Connection, ConnectionError
 from nucleon.amqp.exceptions import PreconditionFailed, NotFound
 

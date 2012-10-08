@@ -6,6 +6,8 @@ Making AMQP Connections
     .. autoclass:: Connection
 
         .. automethod:: connect
+        .. automethod:: on_connect
+        .. automethod:: on_error
         .. automethod:: allocate_channel
         .. automethod:: channel
         .. automethod:: close
@@ -45,6 +47,18 @@ before it is connected, obviously :) )::
                 queue='updates',
                 routing_key='*.update'
             )
+
+Note that ``on_connect`` is current dispatched asynchronously, so you can't
+know what order these print statements will be output in::
+
+    conn = Connection(AMQP_URL)
+
+    @conn.on_connect
+    def on_connect(conn):
+        print "on_connect()"
+
+    conn.connect()
+    print "after connect()
 
 
 Channels

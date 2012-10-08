@@ -1,10 +1,12 @@
+import sys
 import errno
 import struct
 
+from collections import defaultdict
 from contextlib import contextmanager
 
 import gevent
-from gevent.event import AsyncResult
+from gevent.event import AsyncResult, Event
 from gevent.queue import Queue
 from gevent.lock import RLock
 from gevent import socket
@@ -26,7 +28,42 @@ STATE_CONNECTED = 2
 STATE_DISCONNECTING = 3
 
 
-class Connection(object):
+class Dispatcher(object):
+    """Generic event dispatcher."""
+    def __init__(self):
+        self.handlers = defaultdict(list)
+
+    def register(self, event, callback):
+        """Register an callback for event."""
+        self.handlers[event].append(callback)
+
+    def unregister(self, event, callback):
+        """Unregister a previously registered callback"""
+        self.handlers[event].remove(callback)
+
+    def fire(self, event, *args, **kwargs):
+        """Fire an event synchronously.
+
+        Handlers will be executed one-by-one in the current greenlet.
+        """
+        for handler in self.handlers[event][:]:
+            try:
+                handler(*args, **kwargs)
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                continue
+
+    def fire_async(self, event, *args, **kwargs):
+        """Fire an event asynchronously.
+
+        Handlers will be executed in parallel in different greenlets.
+        """
+        for handler in self.handlers[event][:]:
+            gevent.spawn(handler, *args, **kwargs)
+
+
+class Connection(Dispatcher):
     """A connection to an AMQP server.
 
     This class deals with establishing and reconnecting errors, and routes
@@ -42,12 +79,16 @@ class Connection(object):
     channel_max = 65535  # adjusted by Tune method
     MAX_SEND_QUEUE = 32  # frames
 
-    def __init__(self, amqp_url='amqp:///', debug=True):
+    def __init__(self, amqp_url='amqp:///', debug=False):
+        super(Connection, self).__init__()
+
         self.channel_id = 0
         self.channels = {}
+        self.connect_lock = RLock()
         self.channels_lock = RLock()
         self.queue = None
         self.state = STATE_DISCONNECTED
+        self.disconnect_event = Event()
         self.debug = debug
 
         (self.username, self.password, self.vhost, self.host, self.port) = \
@@ -87,6 +128,9 @@ class Connection(object):
         finally:
             channel.close()
 
+    def connected(self):
+        return self.state == STATE_CONNECTED
+
     def connect(self):
         """Open the connection to the server.
 
@@ -96,18 +140,32 @@ class Connection(object):
         If connection fails, an exception will be raised instead.
 
         """
-        self.connected_event = AsyncResult()
-        self._connect()
-        v = self.connected_event.wait()  # Block until the connection is
-                                         # properly ready
 
-        # FFS, AsyncResult.set_exception doesn't work in gevent 1.0b4
-        # so we just use normal setting, but with exception types
-        if isinstance(v, Exception):
-            raise v
+        # Don't bother acquiring the lock if we are already connected
+        if self.connected():
+            return
+        with self.connect_lock:
+            # Check again now we've acquired the lock, as the previous holder
+            # of the lock would typically have completed the connection.
+            if self.connected():
+                return
+
+            self.disconnect_event.clear()
+            self.connected_event = AsyncResult()
+            self._connect()
+            v = self.connected_event.wait()  # Block until the connection is
+                                             # properly ready
+
+            # FFS, AsyncResult.set_exception doesn't work in gevent 1.0b4
+            # so we just use normal setting, but with exception types
+            if isinstance(v, Exception):
+                raise v
 
     def _connect(self):
         """Connect to the remote server and start reader/writer greenlets."""
+
+        # NB. this method isn't safe to call directly; must only be called
+        # via connect() which adds the necessary locking
 
         self.state = STATE_CONNECTING
 
@@ -124,42 +182,66 @@ class Connection(object):
             self.state = STATE_DISCONNECTED
             raise
 
+        # Set up channel state
+        self.channel_id = 1
+        self.channels = {}
+
         # Set up connection greenlets
         self.queue = Queue(self.MAX_SEND_QUEUE)
-        self.reader = gevent.spawn(self.do_read)
-        self.writer = gevent.spawn(self.do_write)
-        self.reader.link(lambda reader: self.writer.kill())
-        self.writer.link(lambda writer: self.reader.kill())
+        reader = gevent.spawn(self.do_read, self.sock)
+        writer = gevent.spawn(self.do_write, self.sock, self.queue)
+        reader.link(lambda reader: writer.kill())
+        writer.link(lambda writer: reader.kill())
+        self.reader = reader
+        self.writer = writer
 
-    def on_error(self, exc):
+    def on_error(self, handler):
+        """Register a handler to be called on connection error."""
+        self.register('error', handler)
+        return handler
+
+    def _on_error(self, exc):
         """Dispatch a connection error to all channels."""
         for id, channel in self.channels.items():
             channel.on_error(exc)
+        self.fire_async('error', self)
+
+    def on_connect(self, handler):
+        "Register handler to be called when the connection is (re)connected."
+        self.register('connect', handler)
+        return handler
 
     def _on_connect(self):
         """Called when the connection is fully open."""
         self.state = STATE_CONNECTED
         self.connected_event.set("Connected!")
+        self.fire_async('connect', self)
 
     def _on_abnormal_disconnect(self, exc):
         """Called when the connection has been abnormally disconnected."""
+        # Called by the tail end of the reader greenlet from the previous
+        # connection
         self.state = STATE_DISCONNECTED
-        self.on_error(exc)
+        try:
+            self._on_error(exc)
+        except Exception:
+            pass
         while True:
             try:
-                self._connect()
+                self.connect()
             except Exception:
-                gevent.sleep(6)
+                gevent.sleep(5)
             else:
                 break
 
     def _on_normal_disconnect(self):
-        """Called when the connection has been abnormally disconnected."""
+        """Called when the connection has closed."""
         self.state = STATE_DISCONNECTED
-        self.on_error(ConnectionError("Connection closed."))
+        self._on_error(ConnectionError("Connection closed."))
         self.queue.put(None)
+        self.disconnect_event.set()
 
-    def do_read(self):
+    def do_read(self, sock):
         """Run a reader greenlet.
 
         This method will read a preamble then loop forever reading frames off
@@ -167,13 +249,9 @@ class Connection(object):
 
         """
         try:
-            reader = BufferedReader(self.sock)
+            reader = BufferedReader(sock)
 
-#            preamble = reader.read(8)
-#            if preamble != spec.PREAMBLE:
-#                raise ConnectionError("Incorrect protocol header from AMQP server")
-
-            while self.state != STATE_DISCONNECTED:
+            while True:
                 frame_header = reader.read(FRAME_HEADER.size)
                 frame_type, channel, size = FRAME_HEADER.unpack(frame_header)
 
@@ -202,7 +280,7 @@ class Connection(object):
                     pass
                 else:
                     raise ConnectionError("Unknown frame type")
-        except Exception as e:
+        except (gevent.GreenletExit, Exception) as e:
             self.connected_event.set(e)
 
             if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
@@ -238,7 +316,7 @@ class Connection(object):
             return
         c._on_body(payload)
 
-    def do_write(self):
+    def do_write(self, sock, queue):
         """Run a writer greenlet.
 
         This greenlet will loop until the connection closes, writing frames
@@ -246,18 +324,19 @@ class Connection(object):
 
         """
         # Write the protocol header
-        self.sock.sendall(spec.PREAMBLE)
+        sock.sendall(spec.PREAMBLE)
 
         # Enter a send loop
-        while self.state != STATE_DISCONNECTED:
-            msg = self.queue.get()
+        while True:
+            msg = queue.get()
             if msg is None:
-                break
+                return
             if self.debug:
                 self._debug_print('s<-c', msg)
-            self.sock.sendall(msg)
+            sock.sendall(msg)
 
     def _debug_print(self, direction, msg):
+        """Decode a frame and print it for debugging."""
         try:
             # Print method, for debugging
             type, channel, size = FRAME_HEADER.unpack_from(msg)
@@ -311,6 +390,10 @@ class Connection(object):
             self.state = STATE_DISCONNECTING
             self.channels[0].connection_close()
             self.writer.join(timeout=2)
+
+    def join(self):
+        """Wait for the connection to close."""
+        self.disconnect_event.wait()
 
     def __del__(self):
         self.close()

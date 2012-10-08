@@ -157,7 +157,7 @@ def print_decode_properties_map(props_classes):
 
 def print_frame_class(m):
     print "class %s(Frame):" % (m.frame,)
-    print "    __slots__ = %r" % (tuple(f.n for f in m.arguments),)
+    print "    __slots__ = %r" % (tuple(str(f.n) for f in m.arguments),)
     print "    name = '%s'" % (m.klass.name + '.' + m.name)
     print "    METHOD_ID = 0x%08X  # %i,%i %i" % (
         m.method_id,
@@ -249,7 +249,10 @@ def print_decode_properties(c):
         fields = codegen_helpers.UnpackWrapper()
         fields.add(f.n, f.t)
         fields.do_print(" "*8, "props['%s']")
-    print "    return props"
+    print "    hs = props.pop('headers', {})"
+    print "    hs.update(props)"
+    print "    return hs"
+#    print "    return props"
     print
 
 
@@ -304,7 +307,7 @@ def print_writer_class(methods):
         print
 
         if responses:
-            print "    @syncmethod(%s)" % (', '.join(repr(r) for r in responses))
+            print "    @syncmethod(%s)" % (', '.join(repr(str(r)) for r in responses))
         print "    def %s(self, %s):" % (method_name, ', '.join(_default_params(m)),)
 
         docstring = method_doc(m.klass.name, m.name)

@@ -280,7 +280,7 @@ class TestBasic(base.TestCase):
 
             r = channel.basic_get(queue=self.name, no_ack=True)
             self.assertEqual(r.body, 'a')
-            self.assertEqual(repr(headers), repr(r.headers))
+            self.assertEqual(headers, r.headers)
 
             channel.queue_delete(queue=self.name)
 
