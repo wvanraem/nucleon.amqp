@@ -543,3 +543,8 @@ class MessageChannel(Channel):
         if mandatory or immediate:
             self.check_returned()
         return ret
+
+    def close(self):
+        from .connection import STATE_CONNECTED
+        if self.connection and self.connection.state == STATE_CONNECTED:
+            self.channel_close(reply_code=200)

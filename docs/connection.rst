@@ -68,3 +68,17 @@ The Channel that is returned is actually a subclass called MessageChannel that
 adds default semantics for publishing and consuming messages. For the purposes
 of much of this documentation Channel and MessageChannel can be treated
 interchangeably.
+
+It is also possible to allocate a channel without using a context manager::
+
+    conn = Connection(AMQP_URL)
+    conn.connect()
+    channel = conn.allocate_channel()
+    ...
+    channel.close()
+
+This is useful if the channel will be shared between greenlets or used for
+callback-based consumers. Note that the channel can be closed by the server in
+the case of an error, or lost if the connection is lost, so applications should
+use the ``on_connect`` hook described above to allocate/re-allocate the
+channel.

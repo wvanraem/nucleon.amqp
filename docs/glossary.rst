@@ -53,7 +53,7 @@ by RabbitMQ.
 
     broker
         A network service that talks the AMQP protocol, hosts exchanges and
-        queues etc, and ultimately passes messages from publishers to consumers.
+        queues, and ultimately passes messages from publishers to consumers.
 
     channel
         A single TCP connection to an AMQP service can be used for multiple

@@ -85,8 +85,7 @@ class Connection(object):
             yield channel
             channel.check_returned()
         finally:
-            if channel.connection and self.state == STATE_CONNECTED:
-                channel.channel_close(reply_code=200)
+            channel.close()
 
     def connect(self):
         """Open the connection to the server.
@@ -120,7 +119,6 @@ class Connection(object):
 
             (family, socktype, proto, canonname, sockaddr) = addrinfo[0]
             self.sock = socket.socket(family, socktype, proto)
-            #set_ridiculously_high_buffers(self.sd)
             self.sock.connect(sockaddr)
         except:
             self.state = STATE_DISCONNECTED
@@ -308,7 +306,7 @@ class Connection(object):
         # TODO: do heartbeat
 
     def close(self):
-        """TODO: shut down cleanly."""
+        """Disconnect the connection."""
         if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
             self.state = STATE_DISCONNECTING
             self.channels[0].connection_close()
@@ -316,20 +314,3 @@ class Connection(object):
 
     def __del__(self):
         self.close()
-
-
-def set_ridiculously_high_buffers(sd):
-    '''
-    Set large tcp/ip buffers kernel. Let's move the complexity
-    to the operating system! That's a wonderful idea!
-    '''
-    for flag in [socket.SO_SNDBUF, socket.SO_RCVBUF]:
-        for i in range(10):
-            bef = sd.getsockopt(socket.SOL_SOCKET, flag)
-            try:
-                sd.setsockopt(socket.SOL_SOCKET, flag, bef*2)
-            except socket.error:
-                break
-            aft = sd.getsockopt(socket.SOL_SOCKET, flag)
-            if aft <= bef or aft >= 1024*1024:
-                break

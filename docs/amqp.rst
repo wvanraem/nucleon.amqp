@@ -5,6 +5,19 @@ AMQP specifies the concept of a :term:`broker`, a network service that routes
 messages between communicating parties with various levels of reliability
 guarantees.
 
+AMQP offers the ability to decouple services:
+
+* Decouple in time (asynchronicity)
+* Decouple in space (happen somewhere else, perhaps just on the machine that
+  has the necessary data)
+* Decouple languages (empowering you to use the right tool for the job)
+* Decouple concerns (build new services without changes to existing services)
+
+It also provides the benefits of a distributed architecture:
+
+* Availability
+* Performance/scalability
+
 The protocol allows clients to set up within the broker a system of
 :term:`exchanges <exchange>`, :term:`queues <queue>` and the :term:`bindings
 <binding>` between them.
