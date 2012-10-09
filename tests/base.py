@@ -5,6 +5,8 @@ import unittest_backport as unittest
 
 from nucleon.amqp import Connection
 
+AMQP_URL = os.getenv('AMQP_URL', 'amqp://guest:guest@blip.vm/')
+
 
 class TestCase(unittest.TestCase):
     def setUp(self):
@@ -14,7 +16,7 @@ class TestCase(unittest.TestCase):
         self.msg = '%s' % (random.random(),)
         self.declared_queues = []
         self.declared_exchanges = []
-        self.amqp_url = os.getenv('AMQP_URL', 'amqp://guest:guest@blip.vm/')
+        self.amqp_url = AMQP_URL
 
     def tearDown(self):
         conn = Connection(self.amqp_url)
@@ -31,6 +33,7 @@ class TestCase(unittest.TestCase):
                 channel.exchange_delete(exchange=exchange)
             except Exception:
                 channel = conn.allocate_channel()
+        conn.close()
 
 
 def connect(method):

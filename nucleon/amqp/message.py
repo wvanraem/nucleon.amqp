@@ -24,7 +24,12 @@ class Message(object):
 
         This is for backwards compatibility.
         """
-        return getattr(self._frame, key)
+        if key == 'body':
+            return self.body
+        try:
+            return getattr(self._frame, key)
+        except AttributeError:
+            return self.headers[key]
 
     @property
     def exchange(self):

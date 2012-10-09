@@ -1,145 +1,55 @@
-from __future__ import with_statement
-
-import os
-import puka
-
-import base
+from base import TestCase, connect, declares_queues
+from nose.plugins.skip import SkipTest
 
 
-class TestCancel(base.TestCase):
-    @base.connect
-    def test_cancel_single(self, client):
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
+class TestCancel(TestCase):
+    @declares_queues('test-cancel')
+    @connect
+    def test_cancel_single(self, channel):
+        channel.queue_declare(queue='test-cancel')
 
-        promise = client.basic_publish(exchange='', routing_key=self.name,
+        channel.basic_publish(exchange='', routing_key='test-cancel',
                                        body='a')
-        client.wait(promise)
 
-        consume_promise = client.basic_consume(queue=self.name, prefetch_count=1)
-        result = client.wait(consume_promise)
-        self.assertEqual(result['body'], 'a')
+        channel.basic_qos(prefetch_count=1)
+        queue = channel.basic_consume(queue='test-cancel')
+        result = queue.get()
+        self.assertEqual(result.body, 'a')
+        result.ack()
 
-        promise = client.basic_cancel(consume_promise)
-        result = client.wait(promise)
-        self.assertTrue('consumer_tag' in result)
+        channel.basic_cancel(queue.consumer_tag)
+        assert queue.consumer_tag not in channel.consumers
 
-        # TODO: better error
-        # It's illegal to wait on consume_promise after cancel.
-        #with self.assertRaises(Exception):
-        #    client.wait(consume_promise)
+    @connect
+    def test_remote_cancel(self, channel):
+        """Test handling a basic.cancel message from the server.
 
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
+        This is a RabbitMQ extension.
+        """
 
+        # Check we have the required capability - skip the test otherwise
+        capabilities = channel.connection.server_properties.get(
+            'capabilities', {})
+        if not capabilities.get('consumer_cancel_notify', False):
+            raise SkipTest(
+                'Server does not support consumer cancel notifications'
+            )
 
-    @base.connect
-    def test_cancel_multi(self, client):
-        names = [self.name, self.name1, self.name2]
-        for name in names:
-            promise = client.queue_declare(queue=name)
-            client.wait(promise)
-            promise = client.basic_publish(exchange='', routing_key=name,
-                                           body='a')
-            client.wait(promise)
-
-
-        consume_promise = client.basic_consume_multi(queues=names,
-                                                     no_ack=True)
-        for i in range(len(names)):
-            result = client.wait(consume_promise)
-            self.assertEqual(result['body'], 'a')
-
-        promise = client.basic_cancel(consume_promise)
-        result = client.wait(promise)
-        self.assertTrue('consumer_tag' in result)
-
-        # TODO: better error
-        #with self.assertRaises(Exception):
-        #    client.wait(consume_promise)
-
-        promise = client.queue_delete(queue=self.name)
-        client.wait(promise)
-
-    @base.connect
-    def test_cancel_single_notification(self, client):
-        promise = client.queue_declare(queue=self.name)
-        client.wait(promise)
-
-        promise = client.basic_publish(exchange='', routing_key=self.name,
+        channel.queue_declare(queue='test-remote-cancel')
+        channel.basic_publish(exchange='', routing_key='test-remote-cancel',
                                        body='a')
-        client.wait(promise)
 
-        consume_promise = client.basic_consume(queue=self.name, prefetch_count=1)
-        result = client.wait(consume_promise)
-        self.assertEqual(result['body'], 'a')
+        queue = channel.basic_consume(queue='test-remote-cancel', no_ack=True)
+        result = queue.get()
+        self.assertEqual(result.body, 'a')
 
-        promise = client.queue_delete(self.name)
-
-        result = client.wait(consume_promise)
-        self.assertEqual(result.name, 'basic.cancel_ok')
+        channel.queue_delete(queue='test-remote-cancel')
 
         # Make sure the consumer died:
-        promise = client.queue_declare(queue=self.name)
-        result = client.wait(promise)
-        self.assertEqual(result['consumer_count'], 0)
+        result = channel.queue_declare(queue='test-remote-cancel')
+        self.assertEqual(result.consumer_count, 0)
 
-
-    @base.connect
-    def test_cancel_multi_notification(self, client):
-        names = [self.name, self.name1, self.name2]
-        for name in names:
-            promise = client.queue_declare(queue=name)
-            client.wait(promise)
-            promise = client.basic_publish(exchange='', routing_key=name,
-                                           body='a')
-            client.wait(promise)
-
-        consume_promise = client.basic_consume_multi(queues=names,
-                                                     no_ack=True)
-        for i in range(len(names)):
-            result = client.wait(consume_promise)
-            self.assertEqual(result['body'], 'a')
-
-        promise = client.queue_delete(names[0])
-
-        result = client.wait(consume_promise)
-        self.assertEqual(result.name, 'basic.cancel_ok')
-
-        # Make sure the consumer died:
-        for name in names:
-            promise = client.queue_declare(queue=name)
-            result = client.wait(promise)
-            self.assertEqual(result['consumer_count'], 0)
-
-    @base.connect
-    def test_cancel_multi_notification_concurrent(self, client):
-        names = [self.name, self.name1, self.name2]
-        for name in names:
-            promise = client.queue_declare(queue=name)
-            client.wait(promise)
-            promise = client.basic_publish(exchange='', routing_key=name,
-                                           body='a')
-            client.wait(promise)
-
-        consume_promise = client.basic_consume_multi(queues=names,
-                                                     no_ack=True)
-        for i in range(len(names)):
-            result = client.wait(consume_promise)
-            self.assertEqual(result['body'], 'a')
-
-        client.queue_delete(names[0])
-        client.queue_delete(names[2])
-
-        result = client.wait(consume_promise)
-        self.assertEqual(result.name, 'basic.cancel_ok')
-
-        # Make sure the consumer died:
-        for name in names:
-            promise = client.queue_declare(queue=name)
-            result = client.wait(promise)
-            self.assertEqual(result['consumer_count'], 0)
-
+        assert queue.consumer_tag not in channel.consumers
 
 
 if __name__ == '__main__':

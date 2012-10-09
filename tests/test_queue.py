@@ -1,112 +1,86 @@
 from __future__ import with_statement
+import gevent
 
-import os
-import puka
-import random
-import unittest_backport as unittest
+from nucleon.amqp import Connection
+from nucleon.amqp.exceptions import PreconditionFailed, NotFound
+
+from base import TestCase, declares_queues, declares_exchanges
 
 
-AMQP_URL=os.getenv('AMQP_URL')
-
-class TestQueue(unittest.TestCase):
+class TestQueue(TestCase):
     def test_queue_declare(self):
-        qname = 'test%s-this-queue-should-be-autodeleted' % (random.random(),)
+        """We can declare an autodelete queue."""
+        conn = Connection(self.amqp_url)
+        with conn.channel() as channel:
+            resp = channel.queue_declare(auto_delete=True)
+        conn.close()
 
-        client = puka.Client(AMQP_URL)
-        promise = client.connect()
-        client.wait(promise)
-
-        promise = client.queue_declare(queue=qname, auto_delete=True)
-        client.wait(promise)
         # The queue intentionally left hanging. Should be autoremoved.
         # Yes, no assertion here, we don't want to wait for 5 seconds.
 
+    @declares_queues('test-redeclare-queue')
     def test_queue_redeclare(self):
-        qname = 'test%s' % (random.random(),)
+        """We can redeclare a queue only if we don't change its settings."""
+        qname = 'test-redeclare-queue'
 
-        client = puka.Client(AMQP_URL)
-        promise = client.connect()
-        client.wait(promise)
+        conn = Connection(self.amqp_url)
 
-        promise = client.queue_declare(queue=qname, auto_delete=False)
-        r = client.wait(promise)
+        with conn.channel() as channel:
+            channel.queue_declare(queue=qname, auto_delete=False)
 
-        promise = client.queue_declare(queue=qname, auto_delete=False)
-        r = client.wait(promise)
+            # Test can redeclare auto_delete queue
+            channel.queue_declare(queue=qname, auto_delete=False)
 
-        promise = client.queue_declare(queue=qname, auto_delete=True)
-        with self.assertRaises(puka.PreconditionFailed):
-            client.wait(promise)
+            with self.assertRaises(PreconditionFailed):
+                channel.queue_declare(queue=qname, auto_delete=True)
 
-        promise = client.queue_delete(queue=qname)
-        client.wait(promise)
-
-
+    @declares_queues('test-redeclare-queue-args')
     def test_queue_redeclare_args(self):
-        qname = 'test%s' % (random.random(),)
+        """We cannot redeclare a queue if we change its arguments."""
+        qname = 'test-redeclare-queue-args'
 
-        client = puka.Client(AMQP_URL)
-        promise = client.connect()
-        client.wait(promise)
+        conn = Connection(self.amqp_url)
+        conn.connect()
 
-        promise = client.queue_declare(queue=qname, arguments={})
-        r = client.wait(promise)
+        with conn.channel() as channel:
+            channel.queue_declare(queue=qname, arguments={})
 
-        promise = client.queue_declare(queue=qname, arguments={'x-expires':101})
-        with self.assertRaises(puka.PreconditionFailed):
-            client.wait(promise)
-
-        promise = client.queue_delete(queue=qname)
-        client.wait(promise)
-
+            with self.assertRaises(PreconditionFailed):
+                channel.queue_declare(
+                    queue=qname,
+                    arguments={'x-expires': 101}
+                )
 
     def test_queue_delete_not_found(self):
-        client = puka.Client(AMQP_URL)
-        promise = client.connect()
-        client.wait(promise)
+        """NotFound is raised if we delete a queue that doesn't exist."""
+        conn = Connection(self.amqp_url)
 
-        promise = client.queue_delete(queue='not_existing_queue')
+        with conn.channel() as channel:
+            with self.assertRaises(NotFound):
+                channel.queue_delete(queue='not_existing_queue')
 
-        with self.assertRaises(puka.NotFound):
-            client.wait(promise)
-
-
+    @declares_queues('test-queue-bind')
+    @declares_exchanges('test-queue-bind')
     def test_queue_bind(self):
-        qname = 'test%s' % (random.random(),)
+        "We can bind and unbind, and the queue receives messages when bound."
+        qname = 'test-queue-bind'
 
-        client = puka.Client(AMQP_URL)
-        promise = client.connect()
-        client.wait(promise)
+        conn = Connection(self.amqp_url)
 
-        t = client.queue_declare(queue=qname)
-        client.wait(t)
+        with conn.channel() as channel:
+            channel.queue_declare(queue=qname)
+            channel.exchange_declare(exchange=qname, type='direct')
 
-        t = client.exchange_declare(exchange=qname, type='direct')
-        client.wait(t)
+            channel.basic_publish(exchange=qname, routing_key=qname, body='a')
 
-        t = client.basic_publish(exchange=qname, routing_key=qname, body='a')
-        client.wait(t)
+            channel.queue_bind(exchange=qname, queue=qname, routing_key=qname)
 
-        t = client.queue_bind(exchange=qname, queue=qname, routing_key=qname)
-        client.wait(t)
+            channel.basic_publish(exchange=qname, routing_key=qname, body='b')
 
-        t = client.basic_publish(exchange=qname, routing_key=qname, body='b')
-        client.wait(t)
+            channel.queue_unbind(exchange=qname, queue=qname, routing_key=qname)
 
-        t = client.queue_unbind(exchange=qname, queue=qname, routing_key=qname)
-        client.wait(t)
+            channel.basic_publish(exchange=qname, routing_key=qname, body='c')
 
-        t = client.basic_publish(exchange=qname, routing_key=qname, body='c')
-        client.wait(t)
-
-        t = client.basic_get(queue=qname)
-        r = client.wait(t)
-        self.assertEquals(r['body'], 'b')
-        self.assertEquals(r['message_count'], 0)
-
-        t = client.queue_delete(queue=qname)
-        client.wait(t)
-
-        t = client.exchange_delete(exchange=qname)
-        client.wait(t)
-
+            msg = channel.basic_get(queue=qname)
+            self.assertEquals(msg.body, 'b')
+            self.assertEquals(msg['message_count'], 0)

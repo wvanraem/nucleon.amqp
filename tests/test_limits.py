@@ -1,27 +1,30 @@
-import os
-import unittest
-import puka
 import random
-import time
 
-AMQP_URL=os.getenv('AMQP_URL')
+from gevent.pool import Group
+from base import TestCase, declares_queues
 
-class TestLimits(unittest.TestCase):
+from nucleon.amqp import Connection
+from nucleon.amqp.spec import FrameQueueDeclareOk
+
+
+qname = 'test%s' % (random.random(),)
+queues = [qname + '.%s' % (i,) for i in xrange(100)]
+
+
+class TestLimits(TestCase):
+    @declares_queues(*queues)
     def test_parallel_queue_declare(self):
-        qname = 'test%s' % (random.random(),)
-        msg = '%s' % (random.random(),)
 
-        client = puka.Client(AMQP_URL)
-        promise = client.connect()
-        client.wait(promise)
+        conn = Connection(self.amqp_url)
+        conn.connect()
 
-        queues = [qname+'.%s' % (i,) for i in xrange(100)]
-        promises = [client.queue_declare(queue=q) for q in queues]
+        channel = conn.allocate_channel()
 
-        for promise in promises:
-            client.wait(promise)
+        def declare(name):
+            return channel.queue_declare(queue=name)
 
-        promises = [client.queue_delete(queue=q) for q in queues]
-        for promise in promises:
-            client.wait(promise)
+        g = Group()
+        res = g.map(declare, queues)
 
+        assert len(res) == len(queues)
+        assert all(isinstance(r, FrameQueueDeclareOk) for r in res)

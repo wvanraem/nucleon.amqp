@@ -1,14 +1,13 @@
 from __future__ import with_statement
-
-import os
+from nose.plugins.skip import SkipTest
 
 from nucleon.amqp import Connection
 from nucleon.amqp import exceptions
 
 from gevent.queue import Queue, Empty
-from gevent import Timeout
 
 import base
+from base import declares_queues, declares_exchanges
 
 from utils import with_timeout
 
@@ -216,37 +215,55 @@ class TestBasic(base.TestCase):
 
             channel.queue_delete(queue=self.name)
 
+    @declares_exchanges('dead-letter')
+    @declares_queues('test-dead-letter')
     def test_basic_reject_dead_letter_exchange(self):
         client = Connection(self.amqp_url)
         client.connect()
 
+        product = client.server_properties.get('product')
+        vstring = client.server_properties.get('version', '')
+        version = tuple(int(v) for v in vstring.split('.') if v.isdigit())
+
+        if product != 'RabbitMQ' or version < (2, 8, 0):
+            raise SkipTest(
+                "Dead letter exchanges are only supported in RabbitMQ 2.8.0 "
+                "and later."
+            )
+
         with client.channel() as channel:
-            channel.exchange_declare(exchange=self.name1, type='fanout')
-            channel.queue_declare(
-                queue=self.name, arguments={'x-dead-letter-exchange': self.name1})
-            queue = channel.queue_declare(exclusive=True)
+            # Set up the dead letter exchange
+            channel.exchange_declare(exchange='dead-letter', type='fanout')
+            queue = channel.queue_declare(exclusive=True, auto_delete=True)
             dlxqname = queue.queue
+            channel.queue_bind(queue=dlxqname, exchange='dead-letter')
+            dead = channel.basic_consume(queue=dlxqname)
 
-            channel.queue_bind(queue=dlxqname, exchange=self.name1)
-            channel.basic_publish(exchange='', routing_key=self.name,
-                                           body='a')
+            # Declare a new queue and publish a message to it
+            channel.queue_declare(
+                queue='test-dead-letter',
+                arguments={'x-dead-letter-exchange': 'dead-letter'}
+            )
+            channel.basic_publish(
+                exchange='',
+                routing_key='test-dead-letter',
+                body='a'
+            )
 
-            r = channel.basic_get(queue=self.name)
+            # Get the message and reject it
+            r = channel.basic_get(queue='test-dead-letter')
             self.assertEqual(r.body, 'a')
             self.assertTrue(not r.redelivered)
             channel.basic_reject(r.delivery_tag, requeue=False)
 
-            r = channel.basic_get(queue=self.name)
-            self.assertTrue(r is None)
-
-            r = channel.basic_get(queue=dlxqname)
+            # Check that we received it via the dead letter queue
+            r = dead.get(timeout=5)
             assert r is not None
             self.assertEqual(r.body, 'a')
             self.assertEqual(r.headers['x-death'][0]['reason'], 'rejected')
             self.assertTrue(not r.redelivered)
 
-            channel.queue_delete(queue=self.name)
-            channel.exchange_delete(exchange=self.name1)
+            dead.cancel()
 
     def test_properties(self):
         client = Connection(self.amqp_url)

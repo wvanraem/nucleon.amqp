@@ -78,6 +78,7 @@ class Connection(Dispatcher):
     frame_max = 131072   # adjusted by Tune frame
     channel_max = 65535  # adjusted by Tune method
     MAX_SEND_QUEUE = 32  # frames
+    server_properties = None  # properties and capabilities sent by the remote connection
 
     def __init__(self, amqp_url='amqp:///', debug=False):
         super(Connection, self).__init__()
@@ -96,6 +97,9 @@ class Connection(Dispatcher):
 
     def allocate_channel(self):
         """Create a new channel."""
+
+        self.connect()  # This is a no-op if we're already connected
+
         with self.channels_lock:
             for i in xrange(self.channel_max):
                 self.channel_id = self.channel_id % (self.channel_max - 1) + 1
@@ -394,6 +398,3 @@ class Connection(Dispatcher):
     def join(self):
         """Wait for the connection to close."""
         self.disconnect_event.wait()
-
-    def __del__(self):
-        self.close()

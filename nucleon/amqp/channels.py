@@ -310,6 +310,7 @@ class StartChannel(Channel):
         auth = '\0%s\0%s' % (
             self.connection.username, self.connection.password
         )
+        self.connection.server_properties = frame.server_properties
         scapa = frame.server_properties.get('capabilities', {})
         ccapa = {}
         if scapa.get('consumer_cancel_notify'):
@@ -408,6 +409,7 @@ class MessageChannel(Channel):
         self.listeners.set_handler('basic.deliver', self.on_deliver)
         self.listeners.set_handler('basic.return', self.on_basic_return)
         self.listeners.set_handler('basic.cancel-ok', self.on_cancel_ok)
+        self.listeners.set_handler('basic.cancel', self.on_cancel_ok)
 
     def on_deliver(self, message):
         """Called when a message is received.
