@@ -108,7 +108,7 @@ def test(amqp_url=None):
 
                 with settings(warn_only=True):
                     # Run the tests
-                    run('AMQP_URL=%s nosetests -v -s --nologcapture --with-xunit --xunit-file tests.xunit.xml --with-coverage --cover-xml --cover-xml-file coverage.xml tests' % amqp_url)
+                    run('AMQP_URL=%s python runtests.py' % amqp_url)
                     run('pylint --output-format=parseable --rcfile=../tests/pylint.rc nucleon >pylint.report')
 
                 # Retrieve the results
