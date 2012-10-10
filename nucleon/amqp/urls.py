@@ -1,6 +1,8 @@
 import urllib
 import urlparse
 
+AMQP_PORT = 5672
+
 
 def parse_amqp_url(amqp_url):
     '''
@@ -58,6 +60,25 @@ def parse_amqp_url(amqp_url):
     # that empty vhost is not very useful.
     vhost = urllib.unquote(path) if path else '/'
     host = urllib.unquote(o.hostname) if o.hostname else 'localhost'
-    port = o.port if o.port else 5672
+    port = o.port if o.port else AMQP_PORT
     return (username, password, vhost, host, port)
 
+
+def make_amqp_url(username, password, host, port, vhost):
+    """Construct an AMQP URL given connection parameters."""
+
+    if not vhost.startswith('/'):
+        vhost = '/' + vhost
+
+    if port != AMQP_PORT:
+        port = ':%s' % port
+    else:
+        port = ''
+
+    return "amqp://{username}:{password}@{host}{port}{vhost}".format(
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        vhost=vhost
+    )

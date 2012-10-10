@@ -11,6 +11,7 @@ Making AMQP Connections
         .. automethod:: allocate_channel
         .. automethod:: channel
         .. automethod:: close
+        .. automethod:: join
 
 
 Connection will automatically reconnect to the AMQP server if it detects that

@@ -2,7 +2,7 @@ import gevent
 from gevent import socket
 from gevent.queue import Queue
 
-from nucleon.amqp.urls import parse_amqp_url
+from nucleon.amqp.urls import parse_amqp_url, make_amqp_url
 from nucleon.amqp.connection import Connection, ConnectionError
 
 import base
@@ -16,17 +16,28 @@ class TestConnection(base.TestCase):
             client.connect()
 
     def test_connection_refused(self):
-        client = Connection('amqp://127.0.0.1:9999/')
+        client = Connection('amqp://127.0.0.1:15243/')
         with self.assertRaises(socket.error):
             client.connect()
+
+    def test_parse_url(self):
+        (username, password, vhost, host, port) = \
+            parse_amqp_url(self.amqp_url)
 
     # The following tests take 3 seconds each, due to Rabbit.
     def test_wrong_user(self):
         (username, password, vhost, host, port) = \
             parse_amqp_url(self.amqp_url)
 
-        client = Connection('amqp://%s:%s@%s:%s%s' % \
-                                 (username, 'wrongpass', host, port, vhost))
+        url = make_amqp_url(
+            username=username,
+            password='wrongpass',
+            host=host,
+            port=port,
+            vhost=vhost
+        )
+
+        client = Connection(url)
         with self.assertRaises(ConnectionError):
             client.connect()
 
