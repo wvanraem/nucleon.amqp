@@ -331,8 +331,8 @@ class StartChannel(Channel):
 
         This message signals that we are allowed to open a virtual host.
         """
-        self.connection._tune(frame.frame_max, frame.channel_max)
-        self.connection_tune_ok(frame.channel_max, frame.frame_max, 0)
+        self.connection._tune(frame.frame_max, frame.channel_max, frame.heartbeat)
+        self.connection_tune_ok(frame.channel_max, frame.frame_max, self.connection.heartbeat)
 
         # open the connection
         self.connection_open(self.connection.vhost)

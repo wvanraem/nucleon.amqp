@@ -1,10 +1,16 @@
-from nucleon.amqp import Connection
+from __future__ import print_function
+
+import os
 import time
 import datetime
-import gevent
+
+from nucleon.amqp import Connection
 
 
-conn = Connection('amqp://guest:guest@blip.vm/')
+conn = Connection(
+    os.environ.get('AMQP_URL', 'amqp://guest:guest@localhost/'),
+    heartbeat=5
+)
 
 
 @conn.on_connect
@@ -31,13 +37,18 @@ def on_connect(conn):
         while True:
             msg = q.get()
             latency = (time.time() - float(msg.headers['time'])) * 1000
-            print datetime.datetime.now().strftime('[%H:%M:%S]'), "Got message %r" % msg.body, "(latency: %dms)" % latency
+            print(
+                datetime.datetime.now().strftime('[%H:%M:%S]'),
+                "Got message %r" % msg.body,
+                "(latency: %dms)" % latency
+            )
             msg.ack()
 
 
-conn.connect()
+if __name__ == '__main__':
+    conn.connect()
 
-try:
-    conn.join()
-except KeyboardInterrupt:
-    conn.close()
+    try:
+        conn.join()
+    except KeyboardInterrupt:
+        conn.close()

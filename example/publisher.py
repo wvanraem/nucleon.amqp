@@ -1,12 +1,18 @@
-from nucleon.amqp import Connection
+from __future__ import print_function
+
+import os
 import time
 import gevent
+import datetime
+
+from nucleon.amqp import Connection
 
 
+conn = Connection(
+    os.environ.get('AMQP_URL', 'amqp://guest:guest@localhost/'),
+    heartbeat=5
+)
 last_num = 1
-
-
-conn = Connection('amqp://guest:guest@blip.vm/')
 
 
 @conn.on_connect
@@ -29,13 +35,18 @@ def on_connect(conn):
                     'time': str(time.time())
                 }
             )
+            print(
+                datetime.datetime.now().strftime('[%H:%M:%S]'),
+                "Published message '%d'" % last_num
+            )
             last_num += 1
             gevent.sleep(1)
 
 
-conn.connect()
+if __name__ == '__main__':
+    conn.connect()
 
-try:
-    conn.join()
-except KeyboardInterrupt:
-    conn.close()
+    try:
+        conn.join()
+    except KeyboardInterrupt:
+        conn.close()

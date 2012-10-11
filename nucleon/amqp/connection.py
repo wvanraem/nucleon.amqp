@@ -7,7 +7,7 @@ from contextlib import contextmanager
 
 import gevent
 from gevent.event import AsyncResult, Event
-from gevent.queue import Queue
+from gevent.queue import Queue, Empty
 from gevent.lock import RLock
 from gevent import socket
 
@@ -68,7 +68,8 @@ class Connection(Dispatcher):
 
     This class deals with establishing and reconnecting errors, and routes
     messages received off the wire to handlers registered with the
-    corresponding channel.
+    corresponding channel. It also handles sending and receiving heartbeat
+    frames to detect when the connection has been lost.
 
     AMQP sends connection-level errors (connection.close) that cause the
     connection to close; to support this we dispatch such errors to all
@@ -80,7 +81,10 @@ class Connection(Dispatcher):
     MAX_SEND_QUEUE = 32  # frames
     server_properties = None  # properties and capabilities sent by the remote connection
 
-    def __init__(self, amqp_url='amqp:///', debug=False):
+    heartbeat = 0  # seconds between heartbeats. 0 means off.
+                   # NB. heartbeats don't start until they are negotiated
+
+    def __init__(self, amqp_url='amqp:///', heartbeat=30, debug=False):
         super(Connection, self).__init__()
 
         self.channel_id = 0
@@ -91,6 +95,9 @@ class Connection(Dispatcher):
         self.state = STATE_DISCONNECTED
         self.disconnect_event = Event()
         self.debug = debug
+
+        # Negotiate for heartbeats
+        self.requested_heartbeat = heartbeat
 
         (self.username, self.password, self.vhost, self.host, self.port) = \
             parse_amqp_url(str(amqp_url))
@@ -223,8 +230,6 @@ class Connection(Dispatcher):
 
     def _on_abnormal_disconnect(self, exc):
         """Called when the connection has been abnormally disconnected."""
-        # Called by the tail end of the reader greenlet from the previous
-        # connection
         self.state = STATE_DISCONNECTED
         try:
             self._on_error(exc)
@@ -255,12 +260,27 @@ class Connection(Dispatcher):
         try:
             reader = BufferedReader(sock)
 
+            TIMEOUT_EXC = ConnectionError('Heartbeat timeout')
             while True:
+                if self.heartbeat:
+                    t = gevent.Timeout(
+                                seconds=self.heartbeat * 2,
+                                exception=TIMEOUT_EXC)
+                    t.start()
+                else:
+                    t = None
+
                 frame_header = reader.read(FRAME_HEADER.size)
-                frame_type, channel, size = FRAME_HEADER.unpack(frame_header)
+                frame_type, channel, size = \
+                    FRAME_HEADER.unpack(frame_header)
 
                 payload = reader.read(size + 1)
-                assert payload[-1] == '\xCE'
+
+                if t is not None:
+                    t.cancel()
+
+                if payload[-1] != '\xCE':
+                    raise ConnectionError('Received invalid frame data')
 
                 if self.debug:
                     self._debug_print('s->c', frame_header + payload)
@@ -281,6 +301,9 @@ class Connection(Dispatcher):
                     #
                     # Catch it as both 0x04 and 0x08 - see
                     # http://www.rabbitmq.com/amqp-0-9-1-errata.html#section_29
+                    #
+                    # We don't need to handle this specifically - it's already
+                    # covered by the read timeout above.
                     pass
                 else:
                     raise ConnectionError("Unknown frame type")
@@ -288,7 +311,8 @@ class Connection(Dispatcher):
             self.connected_event.set(e)
 
             if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
-                self._on_abnormal_disconnect(e)
+                # Spawn a new greenlet to run the reconnect loop
+                gevent.spawn(self._on_abnormal_disconnect, e)
             else:
                 self.state = STATE_DISCONNECTED
 
@@ -332,7 +356,18 @@ class Connection(Dispatcher):
 
         # Enter a send loop
         while True:
-            msg = queue.get()
+            if self.heartbeat:
+                try:
+                    msg = queue.get(timeout=self.heartbeat)
+                except Empty:
+                    # Send heartbeat
+                    sock.sendall(
+                        FRAME_HEADER.pack(0x08, 0, 0) + '\xCE'
+                    )
+                    continue
+            else:
+                msg = queue.get()
+
             if msg is None:
                 return
             if self.debug:
@@ -386,7 +421,10 @@ class Connection(Dispatcher):
         self.frame_max = min(131072, frame_max)
         self.channel_max = channel_max if channel_max > 0 else 65535
 
-        # TODO: do heartbeat
+        if heartbeat:
+            self.heartbeat = min(self.requested_heartbeat, heartbeat)
+        else:
+            self.heartbeat = self.requested_heartbeat
 
     def close(self):
         """Disconnect the connection."""
