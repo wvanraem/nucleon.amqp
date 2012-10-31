@@ -82,6 +82,7 @@ class Channel(spec.FrameWriter):
     """
     def __init__(self, connection, id):
         self.connection = connection
+        self.send_lock = RLock()
         self.id = id
         self.exc = None
         self._method = None
@@ -121,14 +122,16 @@ class Channel(spec.FrameWriter):
         """Send one frame over the channel."""
         if self.exc:
             raise self.exc
-        self.connection._send_frames(self.id, frame.encode())
+        with self.send_lock:
+            self.connection._send_frames(self.id, frame.encode())
 
     def _send_message(self, frame, headers, payload):
         """Send method, header and body frames over the channel."""
         if self.exc:
             raise self.exc
         fs = encode_message(frame, headers, payload, self.connection.frame_max)
-        self.connection._send_frames(self.id, fs)
+        with self.send_lock:
+            self.connection._send_frames(self.id, fs)
 
     def _on_method(self, frame):
         """Called when the channel has received a method frame."""
