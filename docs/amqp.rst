@@ -68,7 +68,7 @@ below.
 Note that I've drawn specific input routing keys, but routing keys do not need
 to be pre-declared; a message could be published with any routing key. Of
 course, the patterns must have been bound before the message is published or
-the message will not be routed to the corresponding.
+the message will not be routed to a queue.
 
 
 Direct Exchange
