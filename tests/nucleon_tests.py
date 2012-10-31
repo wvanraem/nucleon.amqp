@@ -168,6 +168,8 @@ def test_multiple_publishers_same_connection():
 
     # register consumer with callback
     rchan = conn.allocate_channel()
+    rchan.confirm_select()
+
     consume_promise = rchan.basic_consume(
         queue="listener1",
         callback=recv_callback
@@ -223,6 +225,7 @@ def test_callback_can_call_blocking_methods():
 
     """
     channel = conn.allocate_channel()
+    channel.confirm_select()
 
     def publish(message):
         """Publish helper - publish to the queue listener1."""

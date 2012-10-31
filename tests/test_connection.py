@@ -2,6 +2,7 @@ import gevent
 from gevent import socket
 from gevent.queue import Queue
 
+from nucleon.amqp.exceptions import NotFound
 from nucleon.amqp.urls import parse_amqp_url, make_amqp_url
 from nucleon.amqp.connection import Connection, ConnectionError
 
@@ -40,6 +41,32 @@ class TestConnection(base.TestCase):
         client = Connection(url)
         with self.assertRaises(ConnectionError):
             client.connect()
+
+    @declares_queues('banana123')
+    def test_connection_close_on_del(self):
+        """The connection is automatically closed when no longer referenced.
+
+        We test this through the medium of auto-delete queues; once the
+        connection is closed the server should delete the auto-delete queue.
+
+        We test that the auto-delete queue has been deleted - if this is the
+        case the connection must have closed.
+
+        """
+
+        conn = Connection(self.amqp_url)
+        conn.connect()
+        channel = conn.allocate_channel()
+        channel.queue_declare(queue='banana123', auto_delete=True)
+        channel.basic_consume(queue='banana123')
+        del conn
+        del channel
+
+        # Assert that the auto-delete queue has been deleted
+        conn = Connection(self.amqp_url)
+        with self.assertRaises(NotFound):
+            with conn.channel() as channel:
+                channel.queue_declare(queue='banana123', passive=True)
 
     @declares_queues('just.connected')
     def test_on_connect_handler(self):
@@ -107,7 +134,7 @@ class TestConnection(base.TestCase):
 
         def kill_conn():
             """Kill the connection (in an effectively ungraceful way)"""
-            conn.sock.shutdown(socket.SHUT_RDWR)
+            conn.connection.sock.shutdown(socket.SHUT_RDWR)
 
         def receive_all():
             """Block until all 10 messages have been received"""

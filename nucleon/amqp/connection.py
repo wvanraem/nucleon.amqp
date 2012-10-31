@@ -1,6 +1,8 @@
 import sys
 import errno
 import struct
+import weakref
+from functools import partial
 
 from collections import defaultdict
 from contextlib import contextmanager
@@ -63,7 +65,7 @@ class Dispatcher(object):
             gevent.spawn(handler, *args, **kwargs)
 
 
-class Connection(Dispatcher):
+class BaseConnection(object):
     """A connection to an AMQP server.
 
     This class deals with establishing and reconnecting errors, and routes
@@ -85,7 +87,7 @@ class Connection(Dispatcher):
                    # NB. heartbeats don't start until they are negotiated
 
     def __init__(self, amqp_url='amqp:///', heartbeat=30, debug=False):
-        super(Connection, self).__init__()
+        super(BaseConnection, self).__init__()
 
         self.channel_id = 0
         self.channels = {}
@@ -125,19 +127,6 @@ class Connection(Dispatcher):
         """Remove a channel (presumably because it has closed.)"""
         with self.channels_lock:
             del(self.channels[id])
-
-    @contextmanager
-    def channel(self):
-        """Context manager to acquire a channel.
-
-        The channel will be closed when the context is exited.
-        """
-        channel = self.allocate_channel()
-        try:
-            yield channel
-            channel.check_returned()
-        finally:
-            channel.close()
 
     def connected(self):
         return self.state == STATE_CONNECTED
@@ -206,27 +195,17 @@ class Connection(Dispatcher):
         self.reader = reader
         self.writer = writer
 
-    def on_error(self, handler):
-        """Register a handler to be called on connection error."""
-        self.register('error', handler)
-        return handler
-
     def _on_error(self, exc):
         """Dispatch a connection error to all channels."""
         for id, channel in self.channels.items():
             channel.on_error(exc)
-        self.fire_async('error', self)
-
-    def on_connect(self, handler):
-        "Register handler to be called when the connection is (re)connected."
-        self.register('connect', handler)
-        return handler
+        self.fire_async('error')
 
     def _on_connect(self):
         """Called when the connection is fully open."""
         self.state = STATE_CONNECTED
         self.connected_event.set("Connected!")
-        self.fire_async('connect', self)
+        self.fire_async('connect')
 
     def _on_abnormal_disconnect(self, exc):
         """Called when the connection has been abnormally disconnected."""
@@ -426,13 +405,118 @@ class Connection(Dispatcher):
         else:
             self.heartbeat = self.requested_heartbeat
 
-    def close(self):
-        """Disconnect the connection."""
+    def close(self, block=True, timeout=2):
         if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
             self.state = STATE_DISCONNECTING
-            self.channels[0].connection_close()
-            self.writer.join(timeout=2)
+            if block:
+                self.channels[0].connection_close()
+                self.writer.join(timeout=timeout)
+            else:
+                self.channels[0]._send(
+                    spec.FrameConnectionClose(200, '', 0, 0)
+                )
+
+    def set_dispatcher(self, dispatcher):
+        """Set the event dispatcher.
+
+        BaseConnection holds a weak ref to its dispatcher so that our
+        connection threads don't keep it alive.
+
+        """
+        self._dispatcher = weakref.ref(dispatcher)
+
+    def get_dispatcher(self):
+        """Get the event dispatcher or return None if there is no dispatcher."""
+        if self._dispatcher:
+            return self._dispatcher()
+
+    dispatcher = property(get_dispatcher, set_dispatcher)
+
+    def fire(self, event, *args, **kwargs):
+        """Fire an event using the dispatcher."""
+        d = self.dispatcher
+        if d:
+            return self.dispatcher.fire(event, *args, **kwargs)
+
+    def fire_async(self, event, *args, **kwargs):
+        """Asynchronously fire an event using the dispatcher."""
+        d = self.dispatcher
+        if d:
+            return self.dispatcher.fire_async(event, *args, **kwargs)
+
+
+class Connection(Dispatcher):
+    """The public interface to an AMQP connection.
+
+    The raw mechanics of running an AMQP connection are provided elsewhere;
+    this class adds connection-level semantics, such as a context manager to
+    to allocate and automatically close a channel.
+
+    """
+    def __init__(self, amqp_url='amqp:///', heartbeat=30, debug=False):
+        super(Connection, self).__init__()
+        self.connection = BaseConnection(
+            amqp_url=amqp_url,
+            heartbeat=heartbeat,
+            debug=debug
+        )
+        self.connection.set_dispatcher(self)
+
+    @property
+    def server_properties(self):
+        """Properties and capabilities sent by the broker."""
+        return self.connection.server_properties
+
+    def connect(self):
+        """Open the connection to the server.
+
+        This method blocks until the connection has been opened and handshaking
+        is complete.
+
+        If connection fails, an exception will be raised instead.
+
+        """
+        self.connection.connect()
+
+    def __del__(self):
+        # Destructors cannot block, so we spawn a new greenlet to "run"
+        # the disconnection sequence
+        gevent.spawn(self.connection.close, block=False)
+
+    def close(self):
+        """Disconnect the connection."""
+        self.connection.close()
+
+    def allocate_channel(self):
+        """Allocate a channel.
+
+        The caller is responsible for closing the channel if necessary.
+        """
+        return self.connection.allocate_channel()
+
+    def on_error(self, handler):
+        """Register a handler to be called on connection error."""
+        self.register('error', partial(handler, self))
+        return handler
+
+    def on_connect(self, handler):
+        "Register handler to be called when the connection is (re)connected."
+        self.register('connect', partial(handler, self))
+        return handler
+
+    @contextmanager
+    def channel(self):
+        """Context manager to acquire a channel.
+
+        The channel will be closed when the context is exited.
+        """
+        channel = self.allocate_channel()
+        try:
+            yield channel
+            channel.check_returned()
+        finally:
+            channel.close()
 
     def join(self):
         """Wait for the connection to close."""
-        self.disconnect_event.wait()
+        self.connection.disconnect_event.wait()
