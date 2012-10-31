@@ -66,6 +66,14 @@ Channels
 ''''''''
 
 AMQP allows multiple **channels** to be multiplexed onto a single connection.
+This allows multiple operations to be performed at the same time - even
+publishing and receiving large messages.
+
+It is recommended that each channel should usually be used for one suite of
+operations only, not recycled between requests. This is because any errors will
+force the channel to close and any subsequent operations will raise an error
+immediately.
+
 ``nucleon.amqp`` uses a system of channel reservation to reserve a channel on a
 connection and release it when done::
 
@@ -78,6 +86,7 @@ connection and release it when done::
             routing_key='service',
             body='this is a message'
         )
+
 
 The Channel that is returned is actually a subclass called MessageChannel that
 adds default semantics for publishing and consuming messages. For the purposes
@@ -93,7 +102,8 @@ It is also possible to allocate a channel without using a context manager::
     channel.close()
 
 This is useful if the channel will be shared between greenlets or used for
-callback-based consumers. Note that the channel can be closed by the server in
-the case of an error, or lost if the connection is lost, so applications should
-use the ``on_connect`` hook described above to allocate/re-allocate the
-channel.
+callback-based consumers. Note that the channel is closed by the server in the
+case of an error, or if the connection is lost, so applications will need to
+take care to handle this. For example, they should use the ``on_connect`` hook
+described above to allocate/re-allocate the channel, set up exchanges, queues,
+consumers and so on.

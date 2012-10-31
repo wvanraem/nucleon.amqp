@@ -37,30 +37,39 @@ message to a specific consumer, any consumer, or all consumers, among others.
 Routing a message
 -----------------
 
-Messages are routed to one or more queues based on the exchange that they are
-published to, and the routing key of the message. You could think of each
-message as being published with an *envelope address* which in e-mail format
-would be *routing_key@exchange*.
+Messages are routed to one or more queues based on the **exchange** that they
+are published to, and the **routing key** of the message. To draw a parallel
+with e-mail, you could think of each message being sent to an e-mail address
+like *routing_key@exchange*.
 
 Let's take a closer look at how messages are routed. The ``type`` of the
 exchange controls how the routing key of an incoming message is matched to the
 various bound queues.
 
+.. _topic exchange:
+
 Topic Exchange
 ''''''''''''''
 
-The :term:`topic exchange` is the most general, in that the exchange performs
-pattern matching to map message routing keys to the binding routing key
-patterns:
+The :term:`topic exchange` is the most general type of exchange. When a message
+is published, the exchange works out which queues will receive it by matching
+the message's routing key against the queue binding's **routing key
+pattern**:
 
 .. image:: routing.png
 
+For example, if messages are published with routing keys such as
+``article.new`` or ``comment.new`` we could bind a queue to receive messages
+about both by binding it with a routing key pattern ``*.new``.
 
-Note that I've drawn specific input routing keys, but of course a message could
-be published with any routing key imaginable - most of which would be ignored.
+For more details of the pattern matching, see :ref:`topic-exchange-patterns`
+below.
 
-The nature of the topic exchange patterns will be explained in :ref:`the next
-section <topic-exchange-patterns>`.
+Note that I've drawn specific input routing keys, but routing keys do not need
+to be pre-declared; a message could be published with any routing key. Of
+course, the patterns must have been bound before the message is published or
+the message will not be routed to the corresponding.
+
 
 Direct Exchange
 '''''''''''''''
@@ -72,13 +81,17 @@ multiple routing keys, or routing keys cannot deliver to multiple queues:
 
 .. image:: direct.png
 
+More strictly, queues are bound to one or more specific routing keys. The queue
+will receive all messages published to that exchange with one of those routing
+keys.
+
 Fan-out Exchange
 ''''''''''''''''
 
 Finally, a :term:`fanout exchange` is simpler still. Routing keys are
 disregarded, so there is only one endpoint to which all messages are published
-and queues can be bound. Simply put, every bound queue will receive a copy of
-every message.
+and queues can be bound. Simply put, every message published to the exchange
+will be broadcast to every queue bound to the exchange.
 
 .. image:: fanout.png
 

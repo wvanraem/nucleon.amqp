@@ -1,9 +1,93 @@
 Synchronous/Asynchronous Model
 ==============================
 
-AMQP as a protocol provides both synchronous and asynchronous methods.
-Additionally there are asynchronous messages that can be received by the client
-at any time, including :ref:`error methods <error-handling>`.
+AMQP as a protocol provides both synchronous and asynchronous methods that can
+be called by the client. Synchronous methods return a response. Asynchronous
+methods do not return a response. Additionally there are asynchronous methods
+that can be received by the client at any time, including :ref:`error methods
+<error-handling>`, or messages that are being delivered.
+
+Existing AMQP libraries take a variety of approaches to expose this to the
+programmer. `Pika`_, for example, is normally based around a chain of
+callbacks, leading to out-of-order code such as this::
+
+    from pika.adapters import SelectConnection
+
+    # Create a global channel variable to hold our channel object in
+    channel = None
+
+    def on_connected(connection):
+        """Called when we are fully connected to RabbitMQ"""
+        # Open a channel
+        connection.channel(on_channel_open)
+
+    def on_channel_open(new_channel):
+        """Called when our channel has opened"""
+        global channel
+        channel = new_channel
+        channel.queue_declare(
+            queue="test", durable=True, exclusive=False, auto_delete=False, callback=on_queue_declared
+        )
+
+    def on_queue_declared(frame):
+        """Called when RabbitMQ has told us our Queue has been declared, frame is the response from RabbitMQ"""
+        channel.basic_publish(exchange='', routing_key='test', body='Hello world!')
+
+    connection = SelectConnection(parameters, on_connected)
+
+    try:
+        connection.ioloop.start()
+    except KeyboardInterrupt:
+        connection.close()
+        connection.ioloop.start()
+
+
+Note that the above code includes no error handling at all.
+
+
+`Puka`_, on which nucleon.amqp was originally based, forces the developer to
+choose the point at which to block, for flexibility but much less convenience::
+
+    import puka
+
+    client = puka.Client("amqp://localhost/")
+    promise = client.connect()
+    client.wait(promise)
+
+    promise = client.queue_declare(queue='test')
+    client.wait(promise)
+
+    promise = client.basic_publish(exchange='', routing_key='test',
+                                  body="Hello world!")
+    client.wait(promise)
+
+    promise = client.close()
+    client.wait(promise)
+
+
+nucleon.amqp attempts to make code as synchronous as possible::
+
+    from nucleon.amqp import Connection
+
+    conn = Connection('amqp://localhost/')
+
+    with conn.channel() as channel:
+        channel.queue_declare(queue='test')
+        channel.basic_publish(
+            exchange='',
+            routing_key='test',
+            body='Hello world!'
+        )
+
+This code is clear and concise and raises errors as soon as possible, as
+described below.
+
+.. _`Pika`: http://pika.github.com
+.. _`Puka`: http://puka.github.com
+
+
+Synchronous Methods
+-------------------
 
 The **synchronous** methods follow a simple request-response model, where the
 client makes a request method and expects a response of one form or another.
@@ -23,12 +107,31 @@ If an error was received instead, this is raised immediately::
             queue='nosuchqueue',
             exchange='nosuchexchange')  # exception will be raised here
 
-The **asynchronous** methods do not expect a response. If nucleon.amqp already
+To perform a synchronous operation asynchronously, for example to do several
+operations in parallel, simply run each in a new greenlet::
+
+    channel = conn.allocate_channel()
+    greenlets = []
+    for qname in ('foo', 'bar', 'baz'):
+        greenlets.append(
+            gevent.spawn(channel.queue_declare, queue=qname)
+        )
+    gevent.joinall(greenlets)
+
+Asynchronous Methods
+--------------------
+
+All nucleon.amqp methods are synchronous unless the documentation specifically
+includes a box like this:
+
+    .. warning:: This is an asynchronous method.
+
+These **asynchronous** methods do not expect a response. If nucleon.amqp already
 knows of a connection or channel error then this is raised, but otherwise we
 have no choice but to return immediately. Error messages will be received and
 processed but can't be raised in your code until the next operation is
-attempted, such as in this example with the asynchronous ``basic_publish``
-method::
+attempted, such as in this example with the asynchronous
+:py:meth:`basic_publish <nucleon.amqp.channels.Channel.basic_publish>` method::
 
     with conn.channel() as channel:
 

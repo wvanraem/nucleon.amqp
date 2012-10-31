@@ -11,8 +11,8 @@ integration with `gevent`_.
 
 Unlike other AMQP libraries which try hard to present an asynchronous API to
 synchronous code, nucleon.amqp takes the gevent approach - to the programmer we
-present a **synchronous** model, while remaining
-asynchronous behind the scenes. This provides several benefits:
+present a **synchronous** model, while remaining asynchronous behind the scenes
+(See :doc:`asyncmodel`). This provides several benefits:
 
 * code is simpler to write
 * therefore, code is more likely to be correct

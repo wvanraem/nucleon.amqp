@@ -518,5 +518,6 @@ class Connection(Dispatcher):
             channel.close()
 
     def join(self):
-        """Wait for the connection to close."""
+        """Block until close() has been called and has returned.
+        """
         self.connection.disconnect_event.wait()

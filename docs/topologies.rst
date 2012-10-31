@@ -10,13 +10,21 @@ elements from any of the models below.
 Remote Procedure Call (RPC)
 '''''''''''''''''''''''''''
 
-AMQP can be used to create a decoupled RPC interface, where messages
-encapsulate method requests. The routing dictates which service handles each
-request, and this can be updated without changes to the requesting service.
+AMQP can be used to create a remote procedure call system, where remote method
+calls are sent as AMQP messages. These messages are routed to appropriate
+"request queues" on which the handlers are listening. The requester needs no
+knowledge of the number or the location of these handlers, so the requester is
+decoupled from the handlers, and the handlers can be reconfigured with no
+changes to the requesting service.
+
+A disadvantage is that the requester can be kept waiting if the handler does
+not put a result into the result queue, perhaps because it has hung or crashed,
+etc. The requester would need appropriate timeouts, etc.
 
 .. image:: rpc.png
 
-Availability and load sharing can be achieved simply by adding more handlers.
+Availability and load sharing can be achieved simply by adding more handlers,
+as decribed in the :ref:`task distribution` pattern below.
 
 **Suggested Settings:**
 
@@ -53,7 +61,9 @@ to the original requester.
 With this configuration the developer must choose how to deal with missing
 workers.
 
-* If partial results are partly useful and rapid response is important then we
+* If partial results are useful, and response time is more important than
+  completeness, the reducer doesn't need to wait for all mappers to finish. It
+  could wait for a fixed time and discard any results that arrive too late. We
   could use non-persistent delivery modes and optimise for performance, as with
   the simple RPC above.
 
@@ -69,6 +79,8 @@ workers.
   service deciding how to partition the job and presenting partial jobs direct to
   workers.
 
+
+.. _task distribution:
 
 Task Distribution
 '''''''''''''''''
@@ -97,10 +109,14 @@ The pub-sub pattern is useful because the consumer is responsible for
 registering to receive the events it is interested in. The publisher is
 responsible just for making events available.
 
+
 .. image:: pubsub.png
 
 **Suggested settings:**
 
+* :ref:`Topic exchanges <topic exchange>` are particularly useful in this case,
+  to allow the consumers the flexibility to choose the messages to receive
+  based on a routing key pattern.
 * Because we want reliable eventual consistency we need to use reliable
   publishing.  This would entail making the queues and exchanges ``durable``,
   and publishing each message as ``persistent``.
