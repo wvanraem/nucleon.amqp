@@ -18,6 +18,7 @@ setup(
     description='A gevent-based AMQP library with fast, synchronous API',
     author='Daniel Pope',
     author_email='ext-dan.pope@vertu.com',
+    url='https://bitbucket.org/lordmauve/nucleon.amqp',
     packages=find_packages(),
     namespace_packages=['nucleon'],
     install_requires=[
