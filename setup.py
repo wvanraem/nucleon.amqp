@@ -14,11 +14,11 @@ if any(not os.path.exists(f) for f in generated_files):
 
 setup(
     name='nucleon.amqp',
-    version='0.2.1',
+    version='0.2.1sm',
     description='A gevent-based AMQP library with fast, synchronous API',
     author='Daniel Pope',
     author_email='ext-dan.pope@vertu.com',
-    url='https://bitbucket.org/lordmauve/nucleon.amqp',
+    url='https://bitbucket.org/kriswehner/nucleon.amqp',
     packages=find_packages(),
     namespace_packages=['nucleon'],
     install_requires=[

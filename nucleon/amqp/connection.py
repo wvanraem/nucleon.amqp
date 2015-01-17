@@ -481,7 +481,8 @@ class Connection(Dispatcher):
     def __del__(self):
         # Destructors cannot block, so we spawn a new greenlet to "run"
         # the disconnection sequence
-        gevent.spawn(self.connection.close, block=False)
+        if gevent:
+            gevent.spawn(self.connection.close, block=False)
 
     def close(self):
         """Disconnect the connection."""
