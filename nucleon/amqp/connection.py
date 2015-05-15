@@ -249,14 +249,15 @@ class BaseConnection(object):
                 else:
                     t = None
 
-                frame_header = reader.read(FRAME_HEADER.size)
-                frame_type, channel, size = \
-                    FRAME_HEADER.unpack(frame_header)
+                try:
+                    frame_header = reader.read(FRAME_HEADER.size)
+                    frame_type, channel, size = \
+                        FRAME_HEADER.unpack(frame_header)
 
-                payload = reader.read(size + 1)
-
-                if t is not None:
-                    t.cancel()
+                    payload = reader.read(size + 1)
+                finally:
+                    if t is not None:
+                        t.cancel()
 
                 if payload[-1] != '\xCE':
                     raise ConnectionError('Received invalid frame data')
