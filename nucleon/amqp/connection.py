@@ -1,7 +1,9 @@
+import logging
 import sys
 import errno
 import struct
 import weakref
+import uuid
 from functools import partial
 
 from collections import defaultdict
@@ -22,6 +24,9 @@ from .channels import StartChannel, MessageChannel
 
 
 FRAME_HEADER = struct.Struct('!BHI')
+
+
+logger = logging.getLogger(__name__)
 
 
 STATE_DISCONNECTED = 0
@@ -238,6 +243,7 @@ class BaseConnection(object):
         """
         try:
             reader = BufferedReader(sock)
+            tracking_uuid = uuid.uuid4().hex[:8]
 
             TIMEOUT_EXC = ConnectionError('Heartbeat timeout')
             while True:
@@ -256,8 +262,11 @@ class BaseConnection(object):
 
                     payload = reader.read(size + 1)
                 finally:
+                    logger.info("finally %s" % (tracking_uuid, ))
                     if t is not None:
                         t.cancel()
+                    else:
+                        logger.info("null timer %s" % (tracking_uuid, ))
 
                 if payload[-1] != '\xCE':
                     raise ConnectionError('Received invalid frame data')
@@ -284,10 +293,12 @@ class BaseConnection(object):
                     #
                     # We don't need to handle this specifically - it's already
                     # covered by the read timeout above.
+                    logger.info("heartbeat frame %s" % (tracking_uuid, ))
                     pass
                 else:
                     raise ConnectionError("Unknown frame type")
         except (gevent.GreenletExit, Exception) as e:
+            logger.error("read error %s %s" % (tracking_uuid, e))
             self.connected_event.set(e)
 
             if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
