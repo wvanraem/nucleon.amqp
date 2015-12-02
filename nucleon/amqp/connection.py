@@ -227,6 +227,7 @@ class BaseConnection(object):
         self.state = STATE_DISCONNECTED
         self._on_error(ConnectionError("Connection closed."))
         self.queue.put(None)
+        self.sock.close()
         self.disconnect_event.set()
 
     def do_read(self, sock):
