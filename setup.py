@@ -14,7 +14,7 @@ if any(not os.path.exists(f) for f in generated_files):
 
 setup(
     name='nucleon.amqp',
-    version='0.2.1sm',
+    version='0.2.1sm3',
     description='A gevent-based AMQP library with fast, synchronous API',
     author='Daniel Pope',
     author_email='ext-dan.pope@vertu.com',
