@@ -2,7 +2,6 @@ import sys
 import errno
 import struct
 import weakref
-import uuid
 from functools import partial
 
 from collections import defaultdict
