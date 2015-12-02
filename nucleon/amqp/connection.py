@@ -298,7 +298,7 @@ class BaseConnection(object):
                 else:
                     raise ConnectionError("Unknown frame type")
         except (gevent.GreenletExit, Exception) as e:
-            logger.error("read error %s %s" % (tracking_uuid, e))
+            logger.error("read error %s" % (tracking_uuid,), exc_info=True)
             self.connected_event.set(e)
 
             if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
