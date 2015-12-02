@@ -232,6 +232,7 @@ class BaseConnection(object):
         self.state = STATE_DISCONNECTED
         self._on_error(ConnectionError("Connection closed."))
         self.queue.put(None)
+        self.sock.close()
         self.disconnect_event.set()
 
     def do_read(self, sock):
@@ -298,12 +299,13 @@ class BaseConnection(object):
                 else:
                     raise ConnectionError("Unknown frame type")
         except (gevent.GreenletExit, Exception) as e:
-            logger.error("read error %s" % (tracking_uuid,), exc_info=True)
+            logger.error("read error1 %s" % (tracking_uuid,), exc_info=True)
             self.connected_event.set(e)
 
             if self.state in [STATE_CONNECTED, STATE_CONNECTING]:
                 # Spawn a new greenlet to run the reconnect loop
                 gevent.spawn(self._on_abnormal_disconnect, e)
+                logger.info("abnormal disconnect %s" % (tracking_uuid, ))
             else:
                 self.state = STATE_DISCONNECTED
 
