@@ -22,7 +22,7 @@ setup(
     packages=find_packages(),
     namespace_packages=['nucleon'],
     install_requires=[
-        'gevent==1.0b4',
+        'gevent==1.1rc3',
     ],
     dependency_links=[
         'http://code.google.com/p/gevent/downloads/list',
