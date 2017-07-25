@@ -215,6 +215,10 @@ def decode_value(encoded, offset):
             v, offset = decode_value(encoded, offset)
             value.append(v)
         assert offset == offset_end
+    elif kind == 'b': #byte value
+        value = struct.unpack_from('>B', encoded, offset)[0]
+        offset = offset + 1
+
     else:
         assert False, "Unsupported field kind %s during decoding" % (kind,)
     return value, offset
